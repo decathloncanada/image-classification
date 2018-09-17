@@ -20,7 +20,6 @@ parentdir = os.path.dirname(currentdir)
 class extract_images():
       
     #function to extract images for a given search term
-    #function to extract images for a given search term
     def _get_images(self,search_term, nb_images, verbose, browser, header):
         url = "https://www.google.co.in/search?q="+search_term+"&source=lnms&tbm=isch"
         browser.get(url)
@@ -70,16 +69,17 @@ class extract_images():
         path_to_driver: path to the chrome driver; if None, we assume it is in the root folder
         """
         
-        #we launch Chrome using selenium
-        #if the path of the chrome driver is provided, we use it; otherwise, we assume it is in the root folder
-        if path_to_driver is not None:
-            browser = webdriver.Chrome(path_to_driver)
-        else:
-            browser = webdriver.Chrome(parentdir + '/chromedriver.exe') 
+        for search_term in search_terms:           
+            #we launch Chrome using selenium
+            #if the path of the chrome driver is provided, we use it; otherwise, we assume it is in the root folder
+            if path_to_driver is not None:
+                browser = webdriver.Chrome(path_to_driver)
+            else:
+                browser = webdriver.Chrome(parentdir + '/chromedriver.exe') 
+                
+            header={'User-Agent':"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36"}
             
-        header={'User-Agent':"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36"}
         
-        for search_term in search_terms:
             folder = parentdir + '/data/image_dataset/train/' + search_term
             if os.path.exists(folder):
                 #if we want to delete previously extracted images, to avoid duplicates
@@ -97,12 +97,12 @@ class extract_images():
                 
             #extract the images
             self._get_images(search_term, nb_images=nb_images, verbose=verbose, browser=browser, header=header)                   
-            
+            del browser
 
 if __name__ == '__main__':
     #extract search terms
-#    search_terms = list(pd.read_csv(parentdir + '/data/searchterms.csv', delimiter=',').columns)
-    search_terms = ['soccer socks']
+    search_terms = list(pd.read_csv(parentdir + '/data/searchterms.csv', delimiter=',').columns)
+#    search_terms = ['hockey sticks', 'hockey helmet', 'hockey puck', 'hockey skates', 'hockey pants', 'hockey gloves']
     extracter = extract_images()
-    extracter.run(search_terms, nb_images=120, verbose=False)
+    extracter.run(search_terms, nb_images=120, verbose=True)
     
