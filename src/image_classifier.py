@@ -35,6 +35,146 @@ class image_classifier():
     def __init__(self):
         pass
     
+    #optimize the hyperparameters of the model        
+    def _hyperparameter_optimization(self, num_iterations=50,
+                                     max_nrows=None, num_threads=1, calculated_sports=True,
+                                     display_plot=False, test_percentage=0.2, k=5,
+                                     specific_countries=None, predict_user_ids=None,
+                                     save_results=False, max_users=None):
+        """
+        fitness_function: 0-->built-in precision+recall, 1-->built-in precision,
+                          2-->built-in recall, 3-->manual recall function
+        """
+        
+        #The choice of the fitness function affects the construction of the test set
+        if fitness_function == 3:
+            USE_BUILT_IN_STATS=False
+        else:
+            USE_BUILT_IN_STATS=True
+        
+        self.hyperparameter_opt_conditions = {
+                'num_threads': num_threads,
+                'test_percentage': test_percentage,
+                'use_built_in_stats': USE_BUILT_IN_STATS
+                }
+        
+        #import scikit-optimize libraries
+        from skopt import gp_minimize
+        from skopt.space import Real, Categorical, Integer
+        from skopt.plots import plot_convergence
+        from skopt.utils import use_named_args
+        
+        #read the data
+        self.countries, self.data = utils.read_data_S3(calculated_sports=calculated_sports, 
+                                                       max_nrows=max_nrows,
+                                                       specific_countries=specific_countries)
+        
+        #declare the hyperparameters search space
+        dim_num_components = Integer(low=1, high=60, name='num_components')
+        dim_epochs = Integer(low=1, high=20, name='epochs')
+        dim_loss = Categorical(categories=['warp', 'bpr'], name='loss')      
+        dim_learning_rate = Real(low=1e-3, high=1e-1, prior='log-uniform',
+                                 name='learning_rate')
+        dim_user_alpha = Real(low=0, high=1e-3, name='user_alpha')
+        dim_include_user_features = Categorical(categories=[True, False], 
+                                                 name='include_user_features')
+        dim_add_user_identity = Categorical(categories=[True, False], 
+                                            name='add_user_identity')
+
+        dimensions = [dim_num_components,
+                      dim_epochs,
+                      dim_loss,
+                      dim_learning_rate,
+                      dim_user_alpha,
+                      dim_include_user_features,
+                      dim_add_user_identity]
+        
+        #read default parameters from last optimization
+        try:
+            with open(parentdir + '/data/trained_model/hyperparameters_search' + ''.join(['_' + i for i in specific_countries]) + '.pickle', 'rb') as f:
+                sr = dill.load(f)
+            default_parameters = sr.x
+            print('parameters of previous optimization loaded!')
+
+        except:
+            #fall back default values
+            default_parameters = [2, 5, 'warp', 0.05, 0.0, True, False]
+        
+        self.number_iterations = 0
+    
+        #declare the fitness function
+        @use_named_args(dimensions=dimensions)
+        def fitness(num_components, epochs, loss, learning_rate, user_alpha, 
+                    include_user_features, add_user_identity):
+            
+            self.number_iterations += 1
+            
+            #print the hyper-parameters            
+            print('num components:', num_components)
+            print('epochs:', epochs)
+            print('loss:', loss)
+            print('learning rate:', learning_rate)
+            print('user alpha:', user_alpha)
+            print('include user features:', include_user_features)
+            print('add user identity:', add_user_identity)
+            print()
+            
+            #fit the model
+            self.fit(num_components=num_components, epochs=epochs, loss=loss, 
+                     learning_rate=learning_rate, user_alpha=user_alpha,
+                     include_user_features=include_user_features,
+                     add_user_identity=add_user_identity,
+                     load_data=False, **self.hyperparameter_opt_conditions)
+            
+            #calculate fitness
+            if fitness_function==0: #sum of built-in precision and fitness
+                self._precision_at_k(k=k)
+                self._recall_at_k(k=k)
+                fitness = self.precision + self.recall
+            elif fitness_function==1: #built-in precision
+                self._precision_at_k(k=k)
+                fitness = self.precision
+            elif fitness_function==2: #built-in recall
+                self._recall_at_k(k=k)
+                fitness = self.recall
+            elif fitness_function==3: #manual recall function
+                self._statistics_at_k(k=k, calculate_precision=False, calculate_coverage=False, max_users=max_users)
+                fitness = self.recall
+                
+            print('CALCULATED FITNESS AT ITERATION', self.number_iterations, 'OF:', fitness)
+            print()
+            
+            K.clear_session()
+            del self.model
+                
+            return -1*fitness
+                       
+        # optimization
+        self.search_result = gp_minimize(func=fitness,
+                            dimensions=dimensions,
+                            acq_func='EI', # Expected Improvement.
+                            n_calls=num_iterations,
+                            x0=default_parameters)
+        
+        if save_results:
+            with open(parentdir + '/data/trained_model/hyperparameters_dimensions' + ''.join(['_' + i for i in specific_countries]) + '.pickle', 'wb') as f:
+                dill.dump(dimensions, f, protocol=pickle.HIGHEST_PROTOCOL)
+            
+            with open(parentdir + '/data/trained_model/hyperparameters_search' + ''.join(['_' + i for i in specific_countries]) + '.pickle', 'wb') as f:
+                dill.dump(self.search_result, f, protocol=pickle.HIGHEST_PROTOCOL)
+            
+            print("Hyperparameter search saved!")
+            
+        if display_plot:
+            plot_convergence(self.search_result)   
+            
+        #build results dictionary
+        results_dict = {dimensions[i].name:self.search_result.x[i] for i in range(len(dimensions))}
+        print('Optimal hyperameters found of:')
+        print(results_dict)
+        print()
+        print('Optimal fitness value of:', -float(self.search_result.fun))
+    
     #we fit the model given the images in the training set
     def fit(self, learning_rate=1e-4, epochs=5, steps_per_epoch=20, 
             save_augmented=False, batch_size=20, save_model=True, verbose=True,
@@ -114,11 +254,15 @@ class image_classifier():
         #Save the model
         if save_model:
             model.save(parentdir + '/data/trained_models/trained_model.h5')
+            print('Model saved!')
             
         self.model = model
             
     #evaluation of the accuracy of classification on the test set
-    def evaluate(self):
+    def predict(self):
+        #load the model
+        
+        
         path_to_test = '..\\Test_images'
         generator_test = ImageDataGenerator().flow_from_directory(directory=path_to_test,
                                          target_size=(299, 299),
@@ -130,7 +274,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(fine_tuning=True)
+    classifier.fit(fine_tuning=True, save_model=False)
         
         
         
