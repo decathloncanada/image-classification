@@ -1,1 +1,25 @@
-hockey sticks,hockey helmet,hockey puck,hockey skates,hockey pants,hockey gloves
+search_term,number_imgs,folder_name,train_val
+hockey sticks,100,hockey sticks,train
+hockey helmet,100,hockey helmet,train
+hockey puck,100,hockey puck,train
+hockey skates,100,hockey skates,train
+hockey pants,100,hockey pants,train
+hockey gloves,100,hockey gloves,train
+used hockey sticks,30,hockey sticks,train
+used hockey helmet,30,hockey helmet,train
+used hockey puck,30,hockey puck,train
+used hockey skates,30,hockey skates,train
+used hockey pants,30,hockey pants,train
+used hockey gloves,30,hockey gloves,train
+baton de hockey,50,hockey sticks,train
+casque de hockey,50,hockey helmet,train
+rondelle de hockey,50,hockey puck,train
+patins de hockey,50,hockey skates,train
+pantalons de hockey,50,hockey pants,train
+gants de hockey,50,hockey gloves,train
+baton de hockey usagé,20,hockey sticks,val
+casque de hockey usagé,20,hockey helmet,val
+rondelle de hockey usagé,20,hockey puck,val
+patins de hockey usagé,20,hockey skates,val
+pantalons de hockey usagé,20,hockey pants,val
+gants de hockey usagé,20,hockey gloves,val

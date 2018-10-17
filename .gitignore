@@ -3,3 +3,4 @@ data/augmented_dataset
 data/augmented_dataset/*
 data/trained_models
 data/trained_models/*
+data/*
