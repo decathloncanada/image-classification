@@ -11,14 +11,15 @@ images (using imagenetscraper) and ensemble a number of models
 """
 
 import dill
+import matplotlib.pyplot as plt
+import numpy as np
 import pickle
 
-from tensorflow.python.keras.applications.inception_v3 import InceptionV3, decode_predictions, preprocess_input
-from tensorflow.python.keras.preprocessing import image
-from tensorflow.python.keras.models import Model, Sequential
+from tensorflow.python.keras.applications.inception_v3 import InceptionV3
+from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.python.keras.optimizers import Adam
-from tensorflow.python.keras.preprocessing.image import ImageDataGenerator, img_to_array
+from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import backend as K
 
 import os,sys,inspect
@@ -35,8 +36,118 @@ class image_classifier():
     def __init__(self):
         pass
     
+    #print examples of images not properly classified...
+    #...inspired by https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/10_Fine-Tuning.ipynb
+    def confusion_matrix(self):       
+        from sklearn.metrics import confusion_matrix     
+        
+        # Predict the classes for the images in the validation set
+        self.generator_val.reset()
+        y_pred = self.model.predict_generator(self.generator_val,
+                                             steps=self.val_steps_per_epoch)
+    
+        cls_pred = np.argmax(y_pred,axis=1)
+        
+        # Print the confusion matrix.
+        cm = confusion_matrix(y_true=self.generator_val.classes,  # True class for test-set.
+                          y_pred=cls_pred)  # Predicted class.
+
+        print("Confusion matrix:")
+        
+        # Print the confusion matrix as text.
+        print(cm)
+        
+        # Print the class-names for easy reference.
+        for i, class_name in enumerate(list(self.generator_train.class_indices.keys())):
+            print("({0}) {1}".format(i, class_name))
+    
+    #function to plot error images        
+    def plot_errors(self):
+        #function to plot images...
+        #...inspired by https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/10_Fine-Tuning.ipynb
+        def plot_images(images, cls_true, cls_pred=None, smooth=True):
+            assert len(images) == len(cls_true)
+        
+            # Create figure with sub-plots.
+            fig, axes = plt.subplots(3, 3)
+        
+            # Adjust vertical spacing.
+            if cls_pred is None:
+                hspace = 0.3
+            else:
+                hspace = 0.6
+            fig.subplots_adjust(hspace=hspace, wspace=0.3)
+        
+            # Interpolation type.
+            if smooth:
+                interpolation = 'spline16'
+            else:
+                interpolation = 'nearest'
+        
+            for i, ax in enumerate(axes.flat):
+                # There may be less than 9 images, ensure it doesn't crash.
+                if i < len(images):
+                    # Plot image.
+                    ax.imshow(images[i],
+                              interpolation=interpolation)
+        
+                    # Name of the true class.
+                    cls_true_name = list(self.generator_train.class_indices.keys())[cls_true[i]]
+        
+                    # Show true and predicted classes.
+                    if cls_pred is None:
+                        xlabel = "True: {0}".format(cls_true_name)
+                    else:
+                        # Name of the predicted class.
+                        cls_pred_name = list(self.generator_train.class_indices.keys())[cls_pred[i]]
+        
+                        xlabel = "True: {0}\nPred: {1}".format(cls_true_name, cls_pred_name)
+        
+                    # Show the classes as the label on the x-axis.
+                    ax.set_xlabel(xlabel)
+                
+                # Remove ticks from the plot.
+                ax.set_xticks([])
+                ax.set_yticks([])
+            
+            # Ensure the plot is shown correctly with multiple plots
+            # in a single Notebook cell.
+            plt.show()
+    
+        # Predict the classes for the images in the validation set
+        self.generator_val.reset()
+        y_pred = self.model.predict_generator(self.generator_val,
+                                             steps=self.val_steps_per_epoch)
+    
+        cls_pred = np.argmax(y_pred,axis=1)
+        
+        cls_test = self.generator_val.classes
+        
+        errors = (cls_pred != cls_test)
+
+        # Get the file-paths for images that were incorrectly classified.
+        image_paths_test = [os.path.join(VAL_DIR, filename) for filename in self.generator_val.filenames]
+        image_paths = np.array(image_paths_test)[errors]
+    
+        # Load the first 9 images.
+        images = [plt.imread(path) for path in image_paths[0:9]]
+        images = np.asarray(images)
+        
+        # Get the predicted classes for those images.
+        cls_pred = cls_pred[errors]
+    
+        # Get the true classes for those images.
+        cls_true = cls_test[errors]
+        
+        # Plot the 9 images we have loaded and their corresponding classes.
+        # We have only loaded 9 images so there is no need to slice those again.
+        plot_images(images=images,
+                    cls_true=cls_true[0:9],
+                    cls_pred=cls_pred[0:9])
+        
+    
     #optimize the hyperparameters of the model        
-    def _hyperparameter_optimization(self, num_iterations=50, save_results=True,
+    def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
                                      display_plot=False):
         """
         num_iterations: number of hyperparameter combinations we try
@@ -50,13 +161,14 @@ class image_classifier():
                 
         #declare the hyperparameters search space
         dim_epochs = Integer(low=1, high=10, name='epochs')
-        dim_hidden_size = Integer(low=3, high=1000, name='hidden_size')   
+        dim_hidden_size = Integer(low=6, high=2048, name='hidden_size')   
         dim_learning_rate = Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
         dim_dropout = Real(low=0, high=0.9, name='dropout')
         dim_fine_tuning = Categorical(categories=[True, False], name='fine_tuning')
         dim_nb_layers = Integer(low=1, high=3, name='nb_layers')   
         dim_activation = Categorical(categories=['relu', 'tanh'], name='activation')
+        dim_include_class_weight = Categorical(categories=[True, False], name='include_class_weight')
 
         dimensions = [dim_epochs,
                       dim_hidden_size,
@@ -64,7 +176,8 @@ class image_classifier():
                       dim_dropout,
                       dim_fine_tuning,
                       dim_nb_layers,
-                      dim_activation]
+                      dim_activation,
+                      dim_include_class_weight]
         
         #read default parameters from last optimization
         try:
@@ -75,14 +188,14 @@ class image_classifier():
 
         except:
             #fall back default values
-            default_parameters = [5, 1024, 1e-4, 0, False, 1, 'relu']
+            default_parameters = [5, 1024, 1e-4, 0, False, 1, 'relu', False]
         
         self.number_iterations = 0
     
         #declare the fitness function
         @use_named_args(dimensions=dimensions)
         def fitness(epochs, hidden_size, learning_rate, dropout, 
-                    fine_tuning, nb_layers, activation):
+                    fine_tuning, nb_layers, activation, include_class_weight):
             
             self.number_iterations += 1
             
@@ -94,21 +207,23 @@ class image_classifier():
             print('fine_tuning:', fine_tuning)
             print('nb_layers:', nb_layers)
             print('activation:', activation)
+            print('include_class_weight', include_class_weight)
             print()
             
             #fit the model
             self.fit(epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
-                    fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation)
+                    fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
+                    include_class_weight=include_class_weight)
             
             #extract fitness
-            fitness = self.history['val_accuracy']
+            fitness = self.fitness
                 
             print('CALCULATED FITNESS AT ITERATION', self.number_iterations, 'OF:', fitness)
             print()
             
-            K.clear_session()
             del self.model
-                
+            K.clear_session()
+            
             return -1*fitness
                        
         # optimization
@@ -139,9 +254,8 @@ class image_classifier():
     
     #we fit the model given the images in the training set
     def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
-            dropout=0, hidden_size=1024, nb_layers=1, steps_per_epoch=40,
-            val_steps_per_epoch=5, save_augmented=False, 
-            batch_size=20, save_model=True, verbose=True,
+            dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
+            save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279):
         
         #load the pretrained model, withoug the classification (top) layers
@@ -187,6 +301,16 @@ class image_classifier():
                 
         datagen_val = ImageDataGenerator(rescale=1./255)
         
+        #if we want to weight the classes given the imbalanced number of images
+        if include_class_weight:
+            from sklearn.utils.class_weight import compute_class_weight
+            cls_train = self.generator_train.classes
+            class_weight = compute_class_weight(class_weight='balanced',
+                                    classes=np.unique(cls_train),
+                                    y=cls_train)
+        else:
+            class_weight = None
+        
         #Save the augmented images if we want to
         if save_augmented:
             save_to_dir = AUGMENTED_DIR
@@ -204,13 +328,17 @@ class image_classifier():
                                                             batch_size=batch_size,
                                                             shuffle=False)
         
+        steps_per_epoch = self.generator_train.n / batch_size
+        self.val_steps_per_epoch = self.generator_val.n / batch_size
+        
         #Fit the model
-        self.history = model.fit_generator(generator=self.generator_train,
+        history = model.fit_generator(generator=self.generator_train,
                                   epochs=epochs,
                                   steps_per_epoch=steps_per_epoch,
                                   verbose=verbose,
+                                  class_weight=class_weight,
                                   validation_data=self.generator_val,
-                                  validation_steps=val_steps_per_epoch)
+                                  validation_steps=self.val_steps_per_epoch)
         
         #Fine-tune the model, if we wish so
         if fine_tuning:
@@ -221,28 +349,28 @@ class image_classifier():
                 layer.trainable = True
             model.compile(optimizer=Adam(lr=learning_rate*0.1),   
                           loss=loss,
-                          metrics=['accuracy'])
+                          metrics=['categorical_accuracy'])
             
             #Fit the model
-            self.history = model.fit_generator(generator=self.generator_train,
+            history = model.fit_generator(generator=self.generator_train,
                                       epochs=epochs,
                                       steps_per_epoch=steps_per_epoch,
                                       verbose=verbose,
+                                      class_weight=class_weight,
                                       validation_data=self.generator_val,
-                                      validation_steps=val_steps_per_epoch)
+                                      validation_steps=self.val_steps_per_epoch)
             
         #Evaluate the model, just to be sure
-        self.generator_train.reset()
-        self.results = model.evaluate_generator(generator=self.generator_train, steps=steps_per_epoch)
-        print(self.results[1])
-            
-        
+        self.fitness = history.history['val_categorical_accuracy'][-1]
+             
         #Save the model
         if save_model:
             model.save(parentdir + '/data/trained_models/trained_model.h5')
             print('Model saved!')
-            
+        
         self.model = model
+        del history
+        del model
             
     #evaluation of the accuracy of classification on the test set
     def predict(self, path):
@@ -257,10 +385,12 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(fine_tuning=False, save_model=False, epochs=5, steps_per_epoch=20,
-                   val_steps_per_epoch=3, save_augmented=False)
-#    classifier.predict(VAL_DIR)
+    classifier.fit(fine_tuning=False, save_model=True, epochs=3,
+                   save_augmented=False)
+    classifier.confusion_matrix()
+    classifier.plot_errors()
         
+#    classifier._hyperparameter_optimization(num_iterations=20)
         
         
         
