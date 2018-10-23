@@ -373,29 +373,20 @@ class image_classifier():
         del model
             
     #evaluation of the accuracy of classification on the test set
-    def predict(self, path):
+    def evaluate(self, path):
         generator_test = ImageDataGenerator().flow_from_directory(directory=path,
                                          target_size=(299, 299),
                                          shuffle=False)
         
         #results = model.predict_generator(generator=generator_test)
         self.test_results = self.model.evaluate_generator(generator=generator_test)
-        print('The test accuracy is of', self.test_results[1]*100, '%')
+        print('Accuracy of', self.test_results[1]*100, '%')
 
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(fine_tuning=False, save_model=True, epochs=3,
-                   save_augmented=False)
-    classifier.confusion_matrix()
-    classifier.plot_errors()
-        
+#    classifier.fit(fine_tuning=False, save_model=False, epochs=3,
+#                   save_augmented=False)
+#    classifier.confusion_matrix()
+#    classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
-        
-        
-        
-        
-        
-        
-        
-        

@@ -1,34 +1,69 @@
 # -*- coding: utf-8 -*-
 """
-Router for the endpoint of the AI-sport-recommendations API
+Router for the endpoint of the image classifier
 
-exemple of local url: 
-    http://127.0.0.1:5000/AI-sport-recommendations?user_ids=50016568329,139023213&results=3&new_sports=True
+For a detailed implementation example, see: https://blog.keras.io/index.html
 
 @author: AI team
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from main import predict
+from main import prepare_image
+import io
+import os
+from PIL import Image
+
+from tensorflow.python.keras.preprocessing.image import img_to_array
+from tensorflow.python.keras import models
+import tensorflow as tf
 
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/AI-sport-recommendations')
-def get_recommendations():
-    #get user ids
-    user_ids = [int(i) for i in request.args.get('user_ids').split(',')]    
-    #get the number of recommendations desired
-    num_recommendations = int(request.args.get('results'))
-    #get if we want to filter the sports in the training set or not
-    new_sports = int(request.args.get('new_sports'))
-    if new_sports == 1:
-        new_sports = True
-    else:
-        new_sports = False
+#function to load keras model
+classes = None
+model = None
+graph = None
+def load_model():
+    global classes
+    global graph
+    global model
+    model = models.load_model('data/trained_models/trained_model.h5') 
+    #identify the different classes
+    classes = list(os.walk('data/image_dataset/val'))[0][1]
+    graph = tf.get_default_graph()
+
+@app.route('/classify', methods=['POST'])
+def classify():
+    #initialize the returned data dictionary
+    data = {"success": False}
     
-    #return recommendations as a json   
-    return jsonify(predict(user_ids, k=num_recommendations, filter_train=new_sports, specific_countries=['CA']))
+    if request.method == "POST":
+        if request.files.get("image"):
+            # read the image in PIL format
+            image = request.files["image"].read()
+            image = Image.open(io.BytesIO(image))
+
+            # preprocess the image
+            image = prepare_image(image)
+
+            # classify the image
+            with graph.as_default():
+                results = model.predict(image)[0]
+            data["predictions"] = []
+
+            # loop over the results and add them to returned dictionary
+            for i in range(len(classes)):
+                r = {"label": classes[i], "probability": float(results[i])}
+                data["predictions"].append(r)
+
+            # indicate that the request was a success
+            data["success"] = True
+
+    # return the data as a JSON
+    return jsonify(data)
     
 if __name__ == '__main__':
+    print('Loading classification model')
+    load_model()
     app.run()
