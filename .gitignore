@@ -5,4 +5,4 @@ data/trained_models
 data/trained_models/*
 data/*
 __pycache__
-__pycache__/
+__pycache__/*
