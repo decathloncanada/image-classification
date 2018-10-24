@@ -83,16 +83,32 @@ This will load the model saved in the ./data/trained_model directory, classify t
 ### Classifying an image: from main.py
 The class to which an image belongs can be predicted by running the following command:
 ```
-python main.py --task classify --img {IMG_PATH}
+python main.py --task classify --image {IMAGE_PATH}
 ```
-where you replace {IMG_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class. For instance, let's say you want to distinguish hockey players from soccer players. You can extract a training set of images following the *Building a training set of images* section, and train a model (using the default values of the hyperparameters) following the *Training the classification model* section. Calling the classify method on the following image:
+where you replace {IMAGE_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class, as classified by the model saved in the ./data/trained_model directory. For instance, let's say you want to distinguish hockey players from soccer players. You can extract a training set of images following the *Building a training set of images* section, and train a model (using the default values of the hyperparameters) following the *Training the classification model* section. Calling the classify method on the following image:
 
 ![alt text](https://rdsmedia.cookieless.ca/sports/hockey/nhl/player/212x296/xt.fss.l.nhl.com-p.5497.jpg)
 
-Should return the following response:
+Should return category: probability value pairs such as:
 ```
 {'hockey_player': 0.9165782, 'soccer_player': 0.08342175}
 ```
-As such, the successfully identified the greater probability that the image describes a hockey player.
+As such, the classifier successfully identified the greater probability that the image describes a hockey player. Note that the response could be slightly different from the one above, given the randomness in neural network initialization.
 
 ### Classifying an image: API call
+A simple API was built using Flask framework to classify images online. This API can be run locally by the following command:
+```
+python app.py
+```
+The API is then available at http://localhost:5000/classify. The API takes one argument (img), describing the path to the image we want to classify. A POST request can be run as follows
+
+```
+curl -X POST -F img=@{IMAGE_PATH} 'http://localhost:5000/classify'
+```
+where {IMAGE_PATH} is the path of the image that you want to classify. For instance, calling the API to classify the image presented in the previous section returns the following json:
+
+```
+???
+```
+## Roadmap
+Scalable API...https://developers.decathlon.com 
