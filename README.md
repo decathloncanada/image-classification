@@ -53,6 +53,6 @@ data/
         ...
         
 ```
-Once this set is built, **make sure you take a quick look at the set of images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. 
+Once this set is built, **make sure you take a quick look at the set of images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify.
 
 ### Training the classification model
