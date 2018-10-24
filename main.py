@@ -45,9 +45,9 @@ parser.add_argument('--img', type=str, default=None,
                     help="""
                     Path of the image when we want to predict its class
                     """)
-parser.add_argument('--evaluate_folder', type=str, default=None,
+parser.add_argument('--evaluate_directory', type=str, default=None,
                     help="""
-                    If we want to evaluate accuracy based on images in the "train", "val" or "test" folder
+                    If we want to evaluate accuracy based on images in the "train", "val" or "test" directory
                     """)
 
 args = parser.parse_args()
@@ -56,10 +56,11 @@ args = parser.parse_args()
 if args.task not in ['extract_images', 'hyperparameters', 'fit', 'evaluate', 'classify']:
     print('Task not supported')
     args.task = 'pass'
-    
-if args.evaluate_folder not in ['train', 'val', 'test']:
-    print('evaluate_folder has to be train, val or test')
-    args.task = 'pass'
+
+if args.task == 'evalute_directory':    
+    if args.evaluate_directory not in ['train', 'val', 'test']:
+        print('evaluate_directory has to be train, val or test')
+        args.task = 'pass'
 
 if args.save_model == 1:
     save_model=True
@@ -100,7 +101,7 @@ def decode_prediction(results):
     result_dict = dict(sorted(result_dict.items(), key=operator.itemgetter(1), reverse=True))
     return result_dict
 
-#function to classify the images in a given folder
+#function to classify the images in a given directory
 def classify(img_path):
     #load the image
     image = Image.open(img_path)
@@ -146,7 +147,7 @@ def evaluate():
     #load the model
     model = models.load_model('data/trained_models/trained_model.h5')
     #build the generator
-    generator = ImageDataGenerator(rescale=1./255).flow_from_directory(directory='data/image_dataset/' + args.evaluate_folder,
+    generator = ImageDataGenerator(rescale=1./255).flow_from_directory(directory='data/image_dataset/' + args.evaluate_directory,
                                          target_size=(299, 299),
                                          shuffle=False)
     results = model.evaluate_generator(generator=generator)

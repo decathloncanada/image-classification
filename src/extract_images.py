@@ -108,10 +108,10 @@ class extract_images():
         for name in search_terms_df['folder_name'].unique():
             folder = parentdir + '/data/image_dataset/train/' + name
             if not os.path.exists(folder):
-                os.mkdir(parentdir + '/data/image_dataset/train/' + name)
+                os.makedirs(parentdir + '/data/image_dataset/train/' + name)
             folder = parentdir + '/data/image_dataset/val/' + name
             if not os.path.exists(folder):
-                os.mkdir(parentdir + '/data/image_dataset/val/' + name)
+                os.makedirs(parentdir + '/data/image_dataset/val/' + name)
         
         #extract the images
         for search_term in search_terms:           

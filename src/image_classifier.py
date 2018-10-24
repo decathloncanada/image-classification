@@ -13,6 +13,7 @@ images (using imagenetscraper) and ensemble a number of models
 import dill
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import pickle
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
@@ -365,6 +366,8 @@ class image_classifier():
              
         #Save the model
         if save_model:
+            if not os.path.exists(parentdir + '/data/trained_models'):
+                os.makedirs(parentdir + '/data/trained_models')
             model.save(parentdir + '/data/trained_models/trained_model.h5')
             print('Model saved!')
         
