@@ -1,11 +1,13 @@
 # image-classification
 
-This library contains the methods required to build an image recognition API using transfer learning. The module can be used to extract a training set of images from Google Images, train a transfer learning model built on top of InceptionV3, optimize the hyperparameters of the model using [scikit-optimize library](https://scikit-optimize.github.io/), evaluate the accuracy of the model on a test set and classify images online using a simple Flask API.
+This library contains the methods required to build an image recognition API using transfer learning. The module can be used to extract a training set of images from Google Images, train a transfer learning model built on top of InceptionV3, optimize the hyperparameters of the model using [scikit-optimize library](https://scikit-optimize.github.io/), evaluate the accuracy of the model on a test set and classify images online using a simple Flask API. The library capitalizes on the concepts of data augmentation, fine tuning and hyperparameter optimization, to achieve high accuracy given small sets of training images. 
 
 For any additional information, please contact samuel.mercier@decathlon.com
 
 ## Getting started
-Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, selenium and Flask) properly installed. You can then git clone the project to the desired location
+Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, selenium and Flask) properly installed. If you want to use the extract_images functionality, make sure you have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder. 
+
+You can then git clone the project to the desired location
 ```
 git clone git@github.com:decathloncanada/image-classification.git
 ```
@@ -53,6 +55,24 @@ data/
         ...
         
 ```
-Once this set is built, **make sure you take a quick look at the set of images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify.
+Once this set is built, **make sure you take a quick look at the set of images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder.
 
 ### Training the classification model
+Once you have a dataset of images (in a train and a val folder, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
+```
+python main.py --task fit --save_model 1
+```
+This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a *--save_model 0* argument.  
+
+### Optimization of the hyperparameters
+The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for to the categories we want to classify can be found by the following command:
+```
+python main.py --task hyperparameters --number_iterations 20
+```
+This calls an hyperparameter optimization function which, using [scikit-optimize library](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument *--number_iterations* indicates the number of different combinations of the hyperparameters we let scikit-optimize tries to find good values of the hyperparameters. 
+
+The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model folder. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model .fit function are required to identify quality hyperparameter values.
+
+### Optimization of the hyperparameters
+
+### Classifying an image: API call
