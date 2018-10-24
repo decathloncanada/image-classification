@@ -55,10 +55,10 @@ data/
         ...
         
 ```
-Once this set is built, **make sure you take a quick look at the set of images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder.
+Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
 
 ### Training the classification model
-Once you have a dataset of images (in a train and a val folder, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
+Once you have a dataset of images (in a train and a val directory, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
 ```
 python main.py --task fit --save_model 1
 ```
@@ -69,10 +69,22 @@ The classification system contains a number of hyperparameters (number of epochs
 ```
 python main.py --task hyperparameters --number_iterations 20
 ```
-This calls an hyperparameter optimization function which, using [scikit-optimize library](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument *--number_iterations* indicates the number of different combinations of the hyperparameters we let scikit-optimize tries to find good values of the hyperparameters. 
+This calls an hyperparameter optimization function which, using [scikit-optimize library](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument --number_iterations indicates the number of different combinations of the hyperparameters we let scikit-optimize tries to find good values of the hyperparameters. 
 
-The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model folder. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model .fit function are required to identify quality hyperparameter values.
+The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model .fit function are required to identify quality hyperparameter values.
 
-### Optimization of the hyperparameters
+### Evaluation of the model accuracy
+The classification accuracy of the model can be assessed on a given set of images by the following command:
+```
+python main.py --task evaluate --evaluate_directory test
+```
+This will load the model saved in the ./data/trained_model directory, classify the images found in the directory (either train, val or test) specified by the --evaluate_directory argument, and return the classification accuracy.
+
+### Classifying an image: from main.py
+The class to which an image belongs can be predicted by running the following command:
+```
+python main.py --task classify --img {IMG_PATH}
+```
+where you replace the {IMG_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class. For instance, you can try to extract ...
 
 ### Classifying an image: API call
