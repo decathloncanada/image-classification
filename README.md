@@ -86,6 +86,7 @@ The class to which an image belongs can be predicted by running the following co
 python main.py --task classify --img {IMG_PATH}
 ```
 where you replace {IMG_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class. For instance, let's say you want to distinguish hockey players from soccer players. You can extract a training set of images following the *Building a training set of images* section, and train a model (using the default values of the hyperparameters) following the *Training the classification model* section. Calling the classify method on the following image:
+
 ![alt text](https://rdsmedia.cookieless.ca/sports/hockey/nhl/player/212x296/xt.fss.l.nhl.com-p.5497.jpg)
 
 Should return the following response:
