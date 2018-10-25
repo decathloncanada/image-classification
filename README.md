@@ -83,7 +83,7 @@ This will load the model saved in the ./data/trained_model directory, classify t
 ### Classifying an image: from main.py
 The class to which an image belongs can be predicted by running the following command:
 ```
-python main.py --task classify --image {IMAGE_PATH}
+python main.py --task classify --img {IMAGE_PATH}
 ```
 where you replace {IMAGE_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class, as classified by the model saved in the ./data/trained_model directory. For instance, let's say you want to distinguish hockey players from soccer players. You can extract a training set of images following the *Building a training set of images* section, and train a model (using the default values of the hyperparameters) following the *Training the classification model* section. Calling the classify method on the following image:
 
@@ -103,7 +103,7 @@ python app.py
 The API is then available at http://localhost:5000/classify. The API takes one argument (image), describing the path to the image we want to classify. A POST request can be run as follows
 
 ```
-curl -X POST -F image=@{IMAGE_PATH} 'http://localhost:5000/classify'
+curl -X POST -F img=@{IMAGE_PATH} 'http://localhost:5000/classify'
 ```
 where {IMAGE_PATH} is the path of the image that you want to classify. For instance, calling the API to classify the image presented in the previous section returns the following json:
 
