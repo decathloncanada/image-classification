@@ -55,7 +55,7 @@ data/
         ...
         
 ```
-Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
+Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of images, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
 
 ### Training the classification model
 Once you have a dataset of images (in a train and a val directory, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
@@ -65,7 +65,7 @@ python main.py --task fit --save_model 1
 This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a *--save_model 0* argument.  
 
 ### Optimization of the hyperparameters
-The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for to the categories we want to classify can be found by the following command:
+The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:
 ```
 python main.py --task hyperparameters --number_iterations 20
 ```
