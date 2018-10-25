@@ -71,7 +71,7 @@ python main.py --task hyperparameters --number_iterations 20
 ```
 This calls an hyperparameter optimization function which, using [scikit-optimize](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument --number_iterations indicates the number of different combinations of the hyperparameters we let scikit-optimize attempt to identify good values of the hyperparameters. 
 
-The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model .fit function are required to identify quality hyperparameter values.
+The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model *.fit* function are required to identify quality hyperparameter values.
 
 ### Evaluation of the model accuracy
 The classification accuracy of the model can be assessed on a given set of images by the following command:
@@ -100,7 +100,7 @@ A simple API was built using Flask framework to classify images online. This API
 ```
 python app.py
 ```
-The API is then available at http://localhost:5000/classify. The API takes one argument (image), describing the path to the image we want to classify. A POST request can be run as follows
+The API is then available at http://localhost:5000/classify. The API takes one argument (image), describing the path of the image we want to classify. A POST request can be run as follows
 
 ```
 curl -X POST -F img=@{IMAGE_PATH} 'http://localhost:5000/classify'
