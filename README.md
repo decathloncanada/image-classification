@@ -55,23 +55,23 @@ data/
         ...
         
 ```
-Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of image, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
+Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of images, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
 
 ### Training the classification model
 Once you have a dataset of images (in a train and a val directory, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
 ```
 python main.py --task fit --save_model 1
 ```
-This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a *--save_model 0* argument.  
+This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a --save_model 0 argument.  
 
 ### Optimization of the hyperparameters
-The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for to the categories we want to classify can be found by the following command:
+The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:
 ```
 python main.py --task hyperparameters --number_iterations 20
 ```
-This calls an hyperparameter optimization function which, using [scikit-optimize](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument --number_iterations indicates the number of different combinations of the hyperparameters we let scikit-optimize tries to find good values of the hyperparameters. 
+This calls an hyperparameter optimization function which, using [scikit-optimize](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument --number_iterations indicates the number of different combinations of the hyperparameters we let scikit-optimize attempt to identify good values of the hyperparameters. 
 
-The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model .fit function are required to identify quality hyperparameter values.
+The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model *.fit* function are required to identify quality hyperparameter values.
 
 ### Evaluation of the model accuracy
 The classification accuracy of the model can be assessed on a given set of images by the following command:
@@ -83,7 +83,7 @@ This will load the model saved in the ./data/trained_model directory, classify t
 ### Classifying an image: from main.py
 The class to which an image belongs can be predicted by running the following command:
 ```
-python main.py --task classify --image {IMAGE_PATH}
+python main.py --task classify --img {IMAGE_PATH}
 ```
 where you replace {IMAGE_PATH} with the path of the image that you want to classify. The call will return the probability that the image belongs to each class, as classified by the model saved in the ./data/trained_model directory. For instance, let's say you want to distinguish hockey players from soccer players. You can extract a training set of images following the *Building a training set of images* section, and train a model (using the default values of the hyperparameters) following the *Training the classification model* section. Calling the classify method on the following image:
 
@@ -100,10 +100,10 @@ A simple API was built using Flask framework to classify images online. This API
 ```
 python app.py
 ```
-The API is then available at http://localhost:5000/classify. The API takes one argument (image), describing the path to the image we want to classify. A POST request can be run as follows
+The API is then available at http://localhost:5000/classify. The API takes one argument (image), describing the path of the image we want to classify. A POST request can be run as follows
 
 ```
-curl -X POST -F image=@{IMAGE_PATH} 'http://localhost:5000/classify'
+curl -X POST -F img=@{IMAGE_PATH} 'http://localhost:5000/classify'
 ```
 where {IMAGE_PATH} is the path of the image that you want to classify. For instance, calling the API to classify the image presented in the previous section returns the following json:
 
