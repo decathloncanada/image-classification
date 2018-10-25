@@ -235,6 +235,9 @@ class image_classifier():
                             x0=default_parameters)
         
         if save_results:
+            if not os.path.exists(parentdir + '/data/trained_models'):
+                os.makedirs(parentdir + '/data/trained_models')
+                
             with open(parentdir + '/data/trained_model/hyperparameters_dimensions.pickle', 'wb') as f:
                 dill.dump(dimensions, f, protocol=pickle.HIGHEST_PROTOCOL)
             

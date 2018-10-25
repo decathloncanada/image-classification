@@ -39,9 +39,9 @@ def classify():
     data = {"success": False}
     
     if request.method == "POST":
-        if request.files.get("image"):
+        if request.files.get("img"):
             # read the image in PIL format
-            image = request.files["image"].read()
+            image = request.files["img"].read()
             image = Image.open(io.BytesIO(image))
 
             # preprocess the image

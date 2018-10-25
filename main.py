@@ -53,7 +53,7 @@ parser.add_argument('--evaluate_directory', type=str, default=None,
 args = parser.parse_args()
 
 #verify the format of the arguments
-if args.task not in ['extract_images', 'hyperparameters', 'fit', 'evaluate', 'classify']:
+if args.task not in ['extract_images', 'hyperparameters', 'fit', 'evaluate', 'classify', None]:
     print('Task not supported')
     args.task = 'pass'
 
@@ -62,13 +62,14 @@ if args.task == 'evalute_directory':
         print('evaluate_directory has to be train, val or test')
         args.task = 'pass'
 
-if args.save_model == 1:
-    save_model=True
-elif args.save_model == 0:
-    save_model=False
-else:
-    print('save_model argument is not 0 or 1')
-    args.task = 'pass'
+if args.task == 'fit':
+    if args.save_model == 1:
+        save_model=True
+    elif args.save_model == 0:
+        save_model=False
+    else:
+        print('save_model argument is not 0 or 1')
+        args.task = 'pass'
 
 if not (args.number_iterations > 10 and isinstance(args.number_iterations, int)):
     print('number_iterations has to be an integer greater than 10')
