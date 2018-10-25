@@ -108,7 +108,20 @@ curl -X POST -F image=@{IMAGE_PATH} 'http://localhost:5000/classify'
 where {IMAGE_PATH} is the path of the image that you want to classify. For instance, calling the API to classify the image presented in the previous section returns the following json:
 
 ```
-???
+{
+  "predictions":[
+    {
+    "label":"hockey_player",
+    "probability":0.9165781736373901
+    },
+    {
+    "label":"soccer_player",
+    "probability":0.0834217518568039
+    }
+  ],
+  "success":true
+}
+
 ```
 ## Roadmap
-Scalable API...https://developers.decathlon.com 
+Future works will involve the application of this library to develop a scalable sport recognition API and sport product detection API. Follow https://developers.decathlon.com for updates.
