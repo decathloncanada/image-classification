@@ -59,16 +59,17 @@ class extract_images():
         
             img = json.loads(x.get_attribute('innerHTML'))["ou"]
             imgtype = json.loads(x.get_attribute('innerHTML'))["ity"]
-            try:
-                req = Request(img)
-                raw_img = urlopen(req, timeout=10).read()
-                File = open(os.path.join(parentdir + '/data/image_dataset/' + level + '/' + folder_name, folder_name + "_" + str(self.success_dict[folder_name]) + "." + imgtype), "wb")
-                File.write(raw_img)
-                File.close()
-                success = success + 1
-                self.success_dict[folder_name] += 1             
-            except:
-                    pass
+            if imgtype in ['jpg', 'jpeg']:
+                try:
+                    req = Request(img)
+                    raw_img = urlopen(req, timeout=10).read()
+                    File = open(os.path.join(parentdir + '/data/image_dataset/' + level + '/' + folder_name, folder_name + "_" + str(self.success_dict[folder_name]) + "." + imgtype), "wb")
+                    File.write(raw_img)
+                    File.close()
+                    success = success + 1
+                    self.success_dict[folder_name] += 1             
+                except:
+                        pass
                 
             if success >= nb_images:
                 break
@@ -82,14 +83,14 @@ class extract_images():
         """
         search_terms: list of terms we want to search, along with the name of the search folder, if it is for training or validation, and the number of images we want to extract
         nb_images: number of images we want to extract
-        delete_previous_images: if we want to empty the folder before the search, to avoid duplicate images
+        delete_previous_images: if we want to empty the directory before the search, to avoid duplicate images
         path_to_driver: path to the chrome driver; if None, we assume it is in the root folder
         """
         
         #read the search terms csv
-        search_terms_df = pd.read_csv(parentdir + '/data/searchterms.csv', delimiter=',')              
+        search_terms_df = pd.read_csv(parentdir + '/data/searchterms.csv', delimiter=',', encoding='latin1')              
         search_terms = search_terms_df['search_term'].unique()
-        self.success_dict = {v:0 for v in search_terms_df.folder_name.unique()}
+        self.success_dict = {v:0 for v in search_terms_df.category.unique()}
         
         #if we want to delete previously extracted images, to avoid duplicates
         if delete_previous_images:
@@ -100,18 +101,24 @@ class extract_images():
             #validation set
             folder = parentdir + '/data/image_dataset/val'
             self._delete_images(folder)
+            #test set
+            folder = parentdir + '/data/image_dataset/test'
+            self._delete_images(folder)
             #augmented set
             folder = parentdir + '/data/augmented_dataset'
             self._delete_images(folder)
                     
         #create the name of the folders
-        for name in search_terms_df['folder_name'].unique():
+        for name in search_terms_df['category'].unique():
             folder = parentdir + '/data/image_dataset/train/' + name
             if not os.path.exists(folder):
-                os.makedirs(parentdir + '/data/image_dataset/train/' + name)
+                os.makedirs(folder)
             folder = parentdir + '/data/image_dataset/val/' + name
             if not os.path.exists(folder):
-                os.makedirs(parentdir + '/data/image_dataset/val/' + name)
+                os.makedirs(folder)
+            folder = parentdir + '/data/image_dataset/test/' + name
+            if not os.path.exists(folder):
+                os.makedirs(folder)
         
         #extract the images
         for search_term in search_terms:           
@@ -125,8 +132,8 @@ class extract_images():
             header={'User-Agent':"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.134 Safari/537.36"}
                           
             nb_images = search_terms_df.loc[search_terms_df.search_term==search_term, 'number_imgs'].values[0]
-            level = search_terms_df.loc[search_terms_df.search_term==search_term, 'train_val'].values[0]
-            folder_name = search_terms_df.loc[search_terms_df.search_term==search_term, 'folder_name'].values[0]
+            level = search_terms_df.loc[search_terms_df.search_term==search_term, 'set'].values[0]
+            folder_name = search_terms_df.loc[search_terms_df.search_term==search_term, 'category'].values[0]
             self._get_images(search_term, nb_images=nb_images, folder_name=folder_name, level=level, verbose=verbose, browser=browser, header=header)                   
             del browser
 

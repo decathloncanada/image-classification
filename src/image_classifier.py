@@ -161,7 +161,7 @@ class image_classifier():
         from skopt.utils import use_named_args
                 
         #declare the hyperparameters search space
-        dim_epochs = Integer(low=1, high=10, name='epochs')
+        dim_epochs = Integer(low=1, high=5, name='epochs')
         dim_hidden_size = Integer(low=6, high=2048, name='hidden_size')   
         dim_learning_rate = Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
@@ -189,7 +189,7 @@ class image_classifier():
 
         except:
             #fall back default values
-            default_parameters = [5, 1024, 1e-4, 0, False, 1, 'relu', False]
+            default_parameters = [3, 1024, 1e-4, 0, False, 1, 'relu', True]
         
         self.number_iterations = 0
     
@@ -262,7 +262,7 @@ class image_classifier():
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279):
         
-        #load the pretrained model, withoug the classification (top) layers
+        #load the pretrained model, without the classification (top) layers
         base_model = InceptionV3(weights='imagenet', include_top=False)
         
         #We expect the classes to be the name of the folders in the training set
@@ -305,16 +305,6 @@ class image_classifier():
                 
         datagen_val = ImageDataGenerator(rescale=1./255)
         
-        #if we want to weight the classes given the imbalanced number of images
-        if include_class_weight:
-            from sklearn.utils.class_weight import compute_class_weight
-            cls_train = self.generator_train.classes
-            class_weight = compute_class_weight(class_weight='balanced',
-                                    classes=np.unique(cls_train),
-                                    y=cls_train)
-        else:
-            class_weight = None
-        
         #Save the augmented images if we want to
         if save_augmented:
             save_to_dir = AUGMENTED_DIR
@@ -334,6 +324,16 @@ class image_classifier():
         
         steps_per_epoch = self.generator_train.n / batch_size
         self.val_steps_per_epoch = self.generator_val.n / batch_size
+        
+        #if we want to weight the classes given the imbalanced number of images
+        if include_class_weight:
+            from sklearn.utils.class_weight import compute_class_weight
+            cls_train = self.generator_train.classes
+            class_weight = compute_class_weight(class_weight='balanced',
+                                    classes=np.unique(cls_train),
+                                    y=cls_train)
+        else:
+            class_weight = None
         
         #Fit the model
         history = model.fit_generator(generator=self.generator_train,
@@ -391,8 +391,8 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-#    classifier.fit(fine_tuning=False, save_model=False, epochs=3,
-#                   save_augmented=False)
+    classifier.fit(fine_tuning=False, save_model=False, epochs=3,
+                   save_augmented=False)
 #    classifier.confusion_matrix()
 #    classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
