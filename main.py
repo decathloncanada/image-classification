@@ -49,6 +49,14 @@ parser.add_argument('--evaluate_directory', type=str, default=None,
                     help="""
                     If we want to evaluate accuracy based on images in the "train", "val" or "test" directory
                     """)
+parser.add_argument('--batch_size', type=int, default=20,
+                    help="""
+                    Batch size of the classifier
+                    """)
+parser.add_argument('--use_TPU', type=int, default=0,
+                    help="""
+                    If we want (1) or not (0) to fit the model using a TPU
+                    """)
 
 args = parser.parse_args()
 
@@ -70,9 +78,21 @@ if args.task == 'fit':
     else:
         print('save_model argument is not 0 or 1')
         args.task = 'pass'
+    
+if args.use_TPU == 1:
+    use_TPU=True
+elif args.use_TPU == 0:
+    use_TPU=False
+else:
+    print('use_TPU argument is not 0 or 1')
+    args.task = 'pass'
 
 if not (args.number_iterations > 10 and isinstance(args.number_iterations, int)):
     print('number_iterations has to be an integer greater than 10')
+    args.task = 'pass'
+    
+if not (args.batch_size > 0 and isinstance(args.batch_size, int)):
+    print('batch_size has to be a positive integer')
     args.task = 'pass'
 
 if args.task == 'classify':    
@@ -122,7 +142,9 @@ def extract_images():
 #function to perform hyperparameter optimization
 def hyperparameters():
     classifier = ic.image_classifier()
-    classifier._hyperparameter_optimization(num_iterations=args.number_iterations)
+    classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
+                                            batch_size=args.batch_size,
+                                            use_TPU=use_TPU)
     
 #function to fit the model using saved hyperparameters (when available) 
 def fit():
@@ -141,7 +163,7 @@ def fit():
         opt_params = {}
     
     classifier = ic.image_classifier()
-    classifier.fit(save_model=save_model, **opt_params)
+    classifier.fit(save_model=save_model, use_TPU=use_TPU, **opt_params)
     
 #function to evaluate the classification accuracy
 def evaluate():

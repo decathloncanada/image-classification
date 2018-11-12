@@ -14,7 +14,7 @@ import dill
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import pickle
+import pickle as pickle
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.models import Model
@@ -22,6 +22,7 @@ from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropou
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import backend as K
+import tensorflow as tf
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -148,11 +149,13 @@ class image_classifier():
         
     
     #optimize the hyperparameters of the model        
-    def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
-                                     display_plot=False):
+    def _hyperparameter_optimization(self, num_iterations=20, save_results=True,
+                                     display_plot=False, batch_size=20, use_TPU=False):
         """
         num_iterations: number of hyperparameter combinations we try
         """
+        self.batch_size = batch_size
+        self.use_TPU = use_TPU
         
         #import scikit-optimize libraries
         from skopt import gp_minimize
@@ -214,7 +217,8 @@ class image_classifier():
             #fit the model
             self.fit(epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
                     fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
-                    include_class_weight=include_class_weight)
+                    include_class_weight=include_class_weight, batch_size=self.batch_size,
+                    use_TPU=self.use_TPU)
             
             #extract fitness
             fitness = self.fitness
@@ -238,10 +242,10 @@ class image_classifier():
             if not os.path.exists(parentdir + '/data/trained_models'):
                 os.makedirs(parentdir + '/data/trained_models')
                 
-            with open(parentdir + '/data/trained_model/hyperparameters_dimensions.pickle', 'wb') as f:
+            with open(parentdir + '/data/trained_models/hyperparameters_dimensions.pickle', 'wb') as f:
                 dill.dump(dimensions, f, protocol=pickle.HIGHEST_PROTOCOL)
             
-            with open(parentdir + '/data/trained_model/hyperparameters_search.pickle', 'wb') as f:
+            with open(parentdir + '/data/trained_models/hyperparameters_search.pickle', 'wb') as f:
                 dill.dump(self.search_result, f, protocol=pickle.HIGHEST_PROTOCOL)
             
             print("Hyperparameter search saved!")
@@ -260,7 +264,7 @@ class image_classifier():
     def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
-            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279):
+            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False):
         
         #load the pretrained model, without the classification (top) layers
         base_model = InceptionV3(weights='imagenet', include_top=False)
@@ -278,6 +282,16 @@ class image_classifier():
             
         predictions = Dense(len(self.categories), activation='softmax')(x) #Output layer
         model = Model(inputs=base_model.input, outputs=predictions)
+        
+        #adjust the model if we are using a TPU
+        if use_TPU:
+            TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
+            tf.logging.set_verbosity(tf.logging.INFO)
+            
+            model = tf.contrib.tpu.keras_to_tpu_model(model,
+                                                      strategy=tf.contrib.tpu.TPUDistributionStrategy(
+                                                              tf.contrib.cluster_resolver.TPUClusterResolver(TPU_WORKER)))
+            
         
         #Set only the top layers as trainable (if we want to do fine-tuning,
         #we can train the base layers as a second step)
@@ -391,7 +405,9 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(fine_tuning=False, save_model=False, epochs=3,
+    classifier.fit(learning_rate=1e-4, activation='tanh', hidden_size=498,
+                   nb_layers=2, fine_tuning=True, dropout=0.63, 
+                   include_class_weight=True, save_model=True, epochs=10,
                    save_augmented=False)
 #    classifier.confusion_matrix()
 #    classifier.plot_errors()        
