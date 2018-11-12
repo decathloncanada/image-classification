@@ -45,7 +45,7 @@ parser.add_argument('--img', type=str, default=None,
                     help="""
                     Path of the image when we want to predict its class
                     """)
-parser.add_argument('--evaluate_directory', type=str, default=None,
+parser.add_argument('--evaluate_directory', type=str, default='test',
                     help="""
                     If we want to evaluate accuracy based on images in the "train", "val" or "test" directory
                     """)

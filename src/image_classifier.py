@@ -149,7 +149,7 @@ class image_classifier():
         
     
     #optimize the hyperparameters of the model        
-    def _hyperparameter_optimization(self, num_iterations=20, save_results=True,
+    def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
                                      display_plot=False, batch_size=20, use_TPU=False):
         """
         num_iterations: number of hyperparameter combinations we try
@@ -164,7 +164,7 @@ class image_classifier():
         from skopt.utils import use_named_args
                 
         #declare the hyperparameters search space
-        dim_epochs = Integer(low=1, high=5, name='epochs')
+        dim_epochs = Integer(low=1, high=10, name='epochs')
         dim_hidden_size = Integer(low=6, high=2048, name='hidden_size')   
         dim_learning_rate = Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
