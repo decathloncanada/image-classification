@@ -299,7 +299,7 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model
-        optimizer = tf.train.AdamOptimizer(lr=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
         loss = 'categorical_crossentropy'       
         model.compile(optimizer=optimizer,
               loss=loss,
