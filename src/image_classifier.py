@@ -267,7 +267,7 @@ class image_classifier():
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False):
         
         #load the pretrained model, without the classification (top) layers
-        base_model = InceptionV3(weights='imagenet', include_top=False)
+        base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
         
         #We expect the classes to be the name of the folders in the training set
         self.categories = os.listdir(TRAIN_DIR)
@@ -407,7 +407,7 @@ if __name__ == '__main__':
     classifier = image_classifier()
     classifier.fit(learning_rate=1e-4, activation='tanh', hidden_size=498,
                    nb_layers=2, fine_tuning=True, dropout=0.63, 
-                   include_class_weight=True, save_model=True, epochs=10,
+                   include_class_weight=True, save_model=False, epochs=10,
                    save_augmented=False)
 #    classifier.confusion_matrix()
 #    classifier.plot_errors()        
