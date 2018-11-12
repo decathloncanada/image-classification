@@ -299,7 +299,13 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model
-        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        optimizer = Adam(lr=learning_rate)
+        
+        #if we want to try out the TPU, it looks like we currently need to use
+        #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
+        if use_TPU:
+            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            
         loss = 'categorical_crossentropy'       
         model.compile(optimizer=optimizer,
               loss=loss,
@@ -365,6 +371,7 @@ class image_classifier():
                 layer.trainable = False
             for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
                 layer.trainable = True
+                
             model.compile(optimizer=Adam(lr=learning_rate*0.1),   
                           loss=loss,
                           metrics=['categorical_accuracy'])
