@@ -243,10 +243,10 @@ class image_classifier():
                 os.makedirs(parentdir + '/data/trained_models')
                 
             with open(parentdir + '/data/trained_models/hyperparameters_dimensions.pickle', 'wb') as f:
-                dill.dump(dimensions, f, protocol=pickle.HIGHEST_PROTOCOL)
+                dill.dump(dimensions, f)
             
             with open(parentdir + '/data/trained_models/hyperparameters_search.pickle', 'wb') as f:
-                dill.dump(self.search_result, f, protocol=pickle.HIGHEST_PROTOCOL)
+                dill.dump(self.search_result, f)
             
             print("Hyperparameter search saved!")
             
