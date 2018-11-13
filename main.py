@@ -150,10 +150,10 @@ def hyperparameters():
 def fit():
     try:
         #read the optimized hyperparameters
-        with open('./data/trained_model/hyperparameters_dimensions.pickle', 'rb') as f:
+        with open('./data/trained_models/hyperparameters_dimensions.pickle', 'rb') as f:
                 dimensions = dill.load(f)
                 
-        with open('./data/trained_model/hyperparameters_search.pickle', 'rb') as f:
+        with open('./data/trained_models/hyperparameters_search.pickle', 'rb') as f:
                 sr = dill.load(f)
                 
         opt_params = {dimensions[i].name:x[i] for i in range(len(dimensions))}

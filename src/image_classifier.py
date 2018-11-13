@@ -283,33 +283,34 @@ class image_classifier():
         predictions = Dense(len(self.categories), activation='softmax')(x) #Output layer
         model = Model(inputs=base_model.input, outputs=predictions)
         
-        #adjust the model if we are using a TPU
-        if use_TPU:
-            TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
-            tf.logging.set_verbosity(tf.logging.INFO)
-            
-            model = tf.contrib.tpu.keras_to_tpu_model(model,
-                                                      strategy=tf.contrib.tpu.TPUDistributionStrategy(
-                                                              tf.contrib.cluster_resolver.TPUClusterResolver(TPU_WORKER)))
-            
-        
         #Set only the top layers as trainable (if we want to do fine-tuning,
         #we can train the base layers as a second step)
         for layer in base_model.layers:
             layer.trainable = False
             
-        #Define the optimizer and the loss, and compile the model
-        optimizer = Adam(lr=learning_rate)
-        
-        #if we want to try out the TPU, it looks like we currently need to use
-        #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
+        #Define the optimizer and the loss, and compile the model 
+        loss = 'categorical_crossentropy'  
         if use_TPU:
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            #if we want to try out the TPU, it looks like we currently need to use
+            #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
+            #...and https://www.youtube.com/watch?v=jgNwywYcH4w
+            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)    
+            tpu_optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+            model.compile(optimizer=tpu_optimizer,
+                  loss=loss,
+                  metrics=['categorical_accuracy'])
             
-        loss = 'categorical_crossentropy'       
-        model.compile(optimizer=optimizer,
-              loss=loss,
-              metrics=['categorical_accuracy'])
+            TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
+            model = tf.contrib.tpu.keras_to_tpu_model(model,
+                                                      strategy=tf.contrib.tpu.TPUDistributionStrategy(
+                                                              tf.contrib.cluster_resolver.TPUClusterResolver(TPU_WORKER)))
+            tf.logging.set_verbosity(tf.logging.INFO)
+            
+        else:
+            optimizer = Adam(lr=learning_rate)
+            model.compile(optimizer=optimizer,
+                  loss=loss,
+                  metrics=['categorical_accuracy'])
         
         #Define the dataset augmentation and batch generator
         datagen_train = ImageDataGenerator(rotation_range=180,
