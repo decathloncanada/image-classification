@@ -156,7 +156,7 @@ def fit():
         with open('./data/trained_models/hyperparameters_search.pickle', 'rb') as f:
                 sr = dill.load(f)
                 
-        opt_params = {dimensions[i].name:x[i] for i in range(len(dimensions))}
+        opt_params = {dimensions[i].name:sr[i] for i in range(len(dimensions))}
         
     except:
         print('Could not find optimal hyperparameters. Selecting default values')
