@@ -246,7 +246,7 @@ class image_classifier():
                 dill.dump(dimensions, f)
             
             with open(parentdir + '/data/trained_models/hyperparameters_search.pickle', 'wb') as f:
-                dill.dump(self.search_result, f)
+                dill.dump(self.search_result.x, f)
             
             print("Hyperparameter search saved!")
             
