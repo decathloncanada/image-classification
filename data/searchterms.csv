@@ -23,24 +23,15 @@ rondelle de hockey,50,hockey_puck,train
 patins de hockey,50,hockey_skates,train
 pantalons de hockey,50,hockey_pants,train
 gants de hockey,50,hockey_gloves,train
-épaulettes hockey,50,shoulder_pads,train
-protège coude hockey,50,elbow_pads,train
-protège cou hockey,50,neck_guards,train
-bâton de hockey usagé,20,hockey_sticks,val
-casque de hockey usagé,20,hockey_helmet,val
-rondelle de hockey usagé,20,hockey_puck,val
-patins de hockey usagé,20,hockey_skates,val
-pantalons de hockey usagé,20,hockey_pants,val
-gants de hockey usagé,20,hockey_gloves,val
-épaulettes hockey usagé,20,shoulder_pads,val
-protège coude hockey usagé,20,elbow_pads,val
-protège cou hockey usagé,20,neck_guards,val
-hockeyklubba begagnade,20,hockey_sticks,test
-hockeyhjälm begagnade,20,hockey_helmet,test
-hockey puck begagnade,20,hockey_puck,test
-hockey skridskor begagnade,20,hockey_skates,test
-byxor hockey begagnade,20,hockey_pants,test
-handskar hockey begagnade,20,hockey_gloves,test
-hockey axelskydd begagnade,20,shoulder_pads,test
-hockey armbågsskyd begagnade,20,elbow_pads,test
-hockey halsskydd begagnade,20,neck_guards,test
+ï¿½paulettes hockey,50,shoulder_pads,train
+protï¿½ge coude hockey,50,elbow_pads,train
+protï¿½ge cou hockey,50,neck_guards,train
+bï¿½ton de hockey usagï¿½,20,hockey_sticks,val
+casque de hockey usagï¿½,20,hockey_helmet,val
+rondelle de hockey usagï¿½,20,hockey_puck,val
+patins de hockey usagï¿½,20,hockey_skates,val
+pantalons de hockey usagï¿½,20,hockey_pants,val
+gants de hockey usagï¿½,20,hockey_gloves,val
+ï¿½paulettes hockey usagï¿½,20,shoulder_pads,val
+protï¿½ge coude hockey usagï¿½,20,elbow_pads,val
+protï¿½ge cou hockey usagï¿½,20,neck_guards,val
