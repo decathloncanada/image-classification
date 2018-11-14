@@ -9,7 +9,7 @@ Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow
 
 You can then git clone the project to the desired location
 ```
-git clone git@github.com:decathloncanada/image-classification.git
+git clone https://github.com/decathloncanada/image-classification.git
 ```
 
 ## Services
