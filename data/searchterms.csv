@@ -23,15 +23,15 @@ rondelle de hockey,50,hockey_puck,train
 patins de hockey,50,hockey_skates,train
 pantalons de hockey,50,hockey_pants,train
 gants de hockey,50,hockey_gloves,train
-�paulettes hockey,50,shoulder_pads,train
-prot�ge coude hockey,50,elbow_pads,train
-prot�ge cou hockey,50,neck_guards,train
-b�ton de hockey usag�,20,hockey_sticks,val
-casque de hockey usag�,20,hockey_helmet,val
-rondelle de hockey usag�,20,hockey_puck,val
-patins de hockey usag�,20,hockey_skates,val
-pantalons de hockey usag�,20,hockey_pants,val
-gants de hockey usag�,20,hockey_gloves,val
-�paulettes hockey usag�,20,shoulder_pads,val
-prot�ge coude hockey usag�,20,elbow_pads,val
-prot�ge cou hockey usag�,20,neck_guards,val
+epaulettes hockey,50,shoulder_pads,train
+protege coude hockey,50,elbow_pads,train
+protege cou hockey,50,neck_guards,train
+baton de hockey usage,20,hockey_sticks,val
+casque de hockey usage,20,hockey_helmet,val
+rondelle de hockey usage,20,hockey_puck,val
+patins de hockey usage,20,hockey_skates,val
+pantalons de hockey usage,20,hockey_pants,val
+gants de hockey usage,20,hockey_gloves,val
+epaulettes hockey usage,20,shoulder_pads,val
+protege coude hockey usage,20,elbow_pads,val
+protege cou hockey usage,20,neck_guards,val

@@ -141,5 +141,5 @@ class extract_images():
 if __name__ == '__main__':
     #extract search terms
     extracter = extract_images()
-    extracter.run(verbose=True)
+#    extracter.run(verbose=True)
     

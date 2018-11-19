@@ -261,8 +261,8 @@ class image_classifier():
         print('Optimal fitness value of:', -float(self.search_result.fun))
     
     #we fit the model given the images in the training set
-    def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
-            dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
+    def fit(self, learning_rate=1e-4, epochs=3, activation='relu',
+            dropout=0, hidden_size=512, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False):
         
@@ -413,10 +413,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(learning_rate=1e-4, activation='tanh', hidden_size=498,
-                   nb_layers=2, fine_tuning=True, dropout=0.63, 
-                   include_class_weight=True, save_model=False, epochs=10,
-                   save_augmented=False)
-#    classifier.confusion_matrix()
-#    classifier.plot_errors()        
+    classifier.fit(save_model=False, save_augmented=False)
+    classifier.confusion_matrix()
+    classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
