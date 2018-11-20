@@ -17,6 +17,7 @@ import os
 import pickle as pickle
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
+from tensorflow.python.keras.applications.xception import Xception
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.python.keras.optimizers import Adam
@@ -150,12 +151,14 @@ class image_classifier():
     
     #optimize the hyperparameters of the model        
     def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
-                                     display_plot=False, batch_size=20, use_TPU=False):
+                                     display_plot=False, batch_size=20, use_TPU=False,
+                                     transfer_model='Inception'):
         """
         num_iterations: number of hyperparameter combinations we try
         """
         self.batch_size = batch_size
         self.use_TPU = use_TPU
+        self.transfer_model = transfer_model
         
         #import scikit-optimize libraries
         from skopt import gp_minimize
@@ -218,7 +221,7 @@ class image_classifier():
             self.fit(epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
                     fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
                     include_class_weight=include_class_weight, batch_size=self.batch_size,
-                    use_TPU=self.use_TPU)
+                    use_TPU=self.use_TPU, transfer_model=self.transfer_model)
             
             #extract fitness
             fitness = self.fitness
@@ -262,12 +265,16 @@ class image_classifier():
     
     #we fit the model given the images in the training set
     def fit(self, learning_rate=1e-4, epochs=3, activation='relu',
-            dropout=0, hidden_size=512, nb_layers=1, include_class_weight=False,
+            dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
-            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False):
+            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
+            transfer_model='Inception'):
         
         #load the pretrained model, without the classification (top) layers
-        base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
+        if transfer_model=='Xception':
+            base_model = Xception(weights='imagenet', include_top=False, input_shape=(299,299,3))
+        else:
+            base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
         
         #We expect the classes to be the name of the folders in the training set
         self.categories = os.listdir(TRAIN_DIR)
@@ -413,7 +420,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False)
+    classifier.fit(save_model=False, save_augmented=False, model='Xception', epochs=5)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)

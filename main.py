@@ -53,6 +53,10 @@ parser.add_argument('--batch_size', type=int, default=20,
                     help="""
                     Batch size of the classifier
                     """)
+parser.add_argument('--transfer_model', type=str, default='Inception',
+                    help="""
+                    Base model used for classification - Inception (V3) and Xception currently supported
+                    """)
 parser.add_argument('--use_TPU', type=int, default=0,
                     help="""
                     If we want (1) or not (0) to fit the model using a TPU
@@ -101,6 +105,10 @@ if args.task == 'classify':
     else:
         print('Unknown path')
         args.task = 'pass'
+        
+if args.transfer_model not in ['Inception', 'Xception']:    
+    print(args.transfer_model + ' not supported. transfer_model supported: inception and xception')
+    args.task = 'pass'
 
 #function to preprocess the image
 def prepare_image(image):
@@ -144,7 +152,8 @@ def hyperparameters():
     classifier = ic.image_classifier()
     classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
                                             batch_size=args.batch_size,
-                                            use_TPU=use_TPU)
+                                            use_TPU=use_TPU,
+                                            transfer_model=args.transfer_model)
     
 #function to fit the model using saved hyperparameters (when available) 
 def fit():
@@ -163,7 +172,9 @@ def fit():
         opt_params = {}
     
     classifier = ic.image_classifier()
-    classifier.fit(save_model=save_model, use_TPU=use_TPU, **opt_params)
+    classifier.fit(save_model=save_model, use_TPU=use_TPU, 
+                   transfer_model=args.transfer_model,
+                   **opt_params)
     
 #function to evaluate the classification accuracy
 def evaluate():
