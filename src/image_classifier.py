@@ -18,6 +18,7 @@ import pickle as pickle
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.applications.xception import Xception
+from tensorflow.python.keras.applications.inception_resnet_v2 import Inception_resnet_v2
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.python.keras.optimizers import Adam
@@ -273,6 +274,8 @@ class image_classifier():
         #load the pretrained model, without the classification (top) layers
         if transfer_model=='Xception':
             base_model = Xception(weights='imagenet', include_top=False, input_shape=(299,299,3))
+        elif transfer_model=='Inception_resnet':
+            base_model = Inception_resnet_v2(weights='imagenet', include_top=False, input_shape=(299,299,3))
         else:
             base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
         
@@ -420,7 +423,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False, model='Xception', epochs=5)
+    classifier.fit(save_model=False, save_augmented=False, model='Inception_resnet', epochs=5)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)

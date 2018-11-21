@@ -106,8 +106,8 @@ if args.task == 'classify':
         print('Unknown path')
         args.task = 'pass'
         
-if args.transfer_model not in ['Inception', 'Xception']:    
-    print(args.transfer_model + ' not supported. transfer_model supported: inception and xception')
+if args.transfer_model not in ['Inception', 'Xception', 'Inception_resnet']:    
+    print(args.transfer_model + ' not supported. transfer_model supported: inception, xception and inception_resnet')
     args.task = 'pass'
 
 #function to preprocess the image
