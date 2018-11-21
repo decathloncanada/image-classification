@@ -420,7 +420,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False, model='Xception', epochs=5)
+    classifier.fit(save_model=False, save_augmented=False, transfer_model='Xception', epochs=5)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
