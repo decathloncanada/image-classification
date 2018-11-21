@@ -5,7 +5,7 @@ This library contains the methods required to build an image recognition API usi
 For any additional information, please contact samuel.mercier@decathlon.com
 
 ## Getting started
-Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, selenium and Flask) properly installed. If you want to use the extract_images functionality, make sure you have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder. 
+Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, pandas, matplotlib, selenium and Flask) properly installed. If you want to use the extract_images functionality, make sure you have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder. 
 
 You can then git clone the project to the desired location
 ```
