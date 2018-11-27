@@ -195,7 +195,7 @@ class image_classifier():
 
         except:
             #fall back default values
-            default_parameters = [3, 1024, 1e-4, 0, False, 1, 'relu', True]
+            default_parameters = [5, 1024, 1e-4, 0, False, 1, 'relu', True]
         
         self.number_iterations = 0
     
