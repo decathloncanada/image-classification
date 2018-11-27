@@ -15,7 +15,7 @@ parentdir = os.path.dirname(currentdir)
 
 from random import shuffle
 
-def split_train(path, split=0.1):
+def split_train(path=parentdir+'\\data\\image_dataset', split=0.1):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
