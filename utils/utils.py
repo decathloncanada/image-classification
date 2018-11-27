@@ -15,7 +15,7 @@ parentdir = os.path.dirname(currentdir)
 
 from random import shuffle
 
-def split_train(path=parentdir+'\\data\\image_dataset', split=0.1):
+def split_train(path=parentdir+'/data/image_dataset', split=0.1):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -25,20 +25,20 @@ def split_train(path=parentdir+'\\data\\image_dataset', split=0.1):
     """
     
     #Create a val subdirectory
-    os.mkdir(path + '\\val')
+    os.mkdir(path + '/val')
     
     #Loop through all the categories in the train directory
-    for i in os.listdir(path + '\\train'):
+    for i in os.listdir(path + '/train'):
         #Create the folder in the val subdirectory
-        os.mkdir(path + '\\val\\' + i)
+        os.mkdir(path + '/val/' + i)
         
         #extract and shuffle all the images
-        images = os.listdir(path + '\\train\\' + i)
+        images = os.listdir(path + '/train/' + i)
         shuffle(images)
         
         #Move a fraction of the images to the val directory
         for j in range(int(split*len(images))):
-            os.rename(path + '\\train\\' + i + '\\' + images[j], path + '\\val\\' + i + '\\' + images[j])
+            os.rename(path + '/train/' + i + '/' + images[j], path + '/val/' + i + '/' + images[j])
         
         
     
