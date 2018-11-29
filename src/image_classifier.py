@@ -18,6 +18,8 @@ import pickle as pickle
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.applications.xception import Xception
+from tensorflow.python.keras.applications.resnet50 import ResNet50
+from tensorflow.python.keras.applications.inception_resnet_v2 import InceptionResNetV2
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.python.keras.optimizers import Adam
@@ -273,8 +275,16 @@ class image_classifier():
         #load the pretrained model, without the classification (top) layers
         if transfer_model=='Xception':
             base_model = Xception(weights='imagenet', include_top=False, input_shape=(299,299,3))
+            target_size=(299,299)
+        elif transfer_model=='Inception_Resnet':
+            base_model = InceptionResNetV2(weights='imagenet', include_top=False, input_shape=(299,299,3))
+            target_size=(299,299)
+        elif transfer_model=='Resnet':
+            base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224,224,3))
+            target_size=(224,224)
         else:
             base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
+            target_size=(299,299)
         
         #We expect the classes to be the name of the folders in the training set
         self.categories = os.listdir(TRAIN_DIR)
@@ -340,13 +350,13 @@ class image_classifier():
             save_to_dir = None
     
         self.generator_train = datagen_train.flow_from_directory(directory=TRAIN_DIR,
-                                                            target_size=(299, 299),
+                                                            target_size=target_size,
                                                             batch_size=batch_size,
                                                             shuffle=True,
                                                             save_to_dir=save_to_dir)
         
         self.generator_val = datagen_val.flow_from_directory(directory=VAL_DIR,
-                                                            target_size=(299, 299),
+                                                            target_size=target_size,
                                                             batch_size=batch_size,
                                                             shuffle=False)
         
@@ -408,9 +418,14 @@ class image_classifier():
         del model
             
     #evaluation of the accuracy of classification on the test set
-    def evaluate(self, path):
+    def evaluate(self, path, transfer_model='Inception'):
+        if transfer_model in ['Inception', 'Xception']:
+            target_size = (299, 299)
+        else:
+            target_size = (224, 224)
+            
         generator_test = ImageDataGenerator().flow_from_directory(directory=path,
-                                         target_size=(299, 299),
+                                         target_size=target_size,
                                          shuffle=False)
         
         #results = model.predict_generator(generator=generator_test)
@@ -420,7 +435,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False, transfer_model='Xception', epochs=5)
+    classifier.fit(save_model=False, save_augmented=False, transfer_model='Inception', epochs=5)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)

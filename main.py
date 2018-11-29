@@ -55,7 +55,7 @@ parser.add_argument('--batch_size', type=int, default=20,
                     """)
 parser.add_argument('--transfer_model', type=str, default='Inception',
                     help="""
-                    Base model used for classification - Inception (V3) and Xception currently supported
+                    Base model used for classification - Inception (V3), Xception, Inception_Resnet (V2) and Resnet (50) currently supported
                     """)
 parser.add_argument('--use_TPU', type=int, default=0,
                     help="""
@@ -106,14 +106,19 @@ if args.task == 'classify':
         print('Unknown path')
         args.task = 'pass'
         
-if args.transfer_model not in ['Inception', 'Xception']:    
-    print(args.transfer_model + ' not supported. transfer_model supported: Inception and Xception')
+if args.transfer_model not in ['Inception', 'Xception', 'Resnet', 'Inception_Resnet']:    
+    print(args.transfer_model + ' not supported. transfer_model supported: Inception, Xception, Inception_Resnet and Resnet')
     args.task = 'pass'
+else:
+    if args.transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
+        target_size = (299, 299)
+    else:
+        target_size = (224, 224)
 
 #function to preprocess the image
 def prepare_image(image):
     #reshape the image
-    image = image.resize((299,299), PIL.Image.BILINEAR).convert("RGB")
+    image = image.resize(target_size, PIL.Image.BILINEAR).convert("RGB")
     #convert the image into a numpy array, and expend to a size 4 tensor
     image = img_to_array(image)
     image = np.expand_dims(image, axis=0)
@@ -182,7 +187,7 @@ def evaluate():
     model = models.load_model('data/trained_models/trained_model.h5')
     #build the generator
     generator = ImageDataGenerator(rescale=1./255).flow_from_directory(directory='data/image_dataset/' + args.evaluate_directory,
-                                         target_size=(299, 299),
+                                         target_size=target_size,
                                          shuffle=False)
     results = model.evaluate_generator(generator=generator)
     print('Accuracy of', results[1]*100, '%')
