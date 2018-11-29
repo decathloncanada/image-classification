@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pickle as pickle
+import random
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.applications.xception import Xception
@@ -134,8 +135,9 @@ class image_classifier():
         image_paths_test = [os.path.join(VAL_DIR, filename) for filename in self.generator_val.filenames]
         image_paths = np.array(image_paths_test)[errors]
     
-        # Load the first 9 images.
-        images = [plt.imread(path) for path in image_paths[0:9]]
+        # Load 9 images randomly picked
+        image_paths = random.sample(list(image_paths), 9)
+        images = [plt.imread(path) for path in image_paths]
         images = np.asarray(images)
         
         # Get the predicted classes for those images.
@@ -266,7 +268,7 @@ class image_classifier():
         print('Optimal fitness value of:', -float(self.search_result.fun))
     
     #we fit the model given the images in the training set
-    def fit(self, learning_rate=1e-4, epochs=3, activation='relu',
+    def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
@@ -419,7 +421,7 @@ class image_classifier():
             
     #evaluation of the accuracy of classification on the test set
     def evaluate(self, path, transfer_model='Inception'):
-        if transfer_model in ['Inception', 'Xception']:
+        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
         else:
             target_size = (224, 224)
@@ -435,7 +437,7 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False, transfer_model='Inception', epochs=5)
+    classifier.fit(save_model=False, save_augmented=False, transfer_model='Inception', epochs=1)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
