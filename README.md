@@ -15,7 +15,7 @@ git clone https://github.com/decathloncanada/image-classification.git
 ## Services
 This library performs the following tasks: extraction of a set of images from Google Images, training a neural network built by transfer learning, optimization of the neural network hyperparameters, evaluation of the model accuracy on a test set, and classification of images using a Flask API.
 
-### Building a training set of images
+### Building training, validation and test sets of images
 To build a set of images to train your neural network, first edit the "searchterms.csv" document in the data folder to indicate the categories you want to classify, the search terms from which you would like to build your sets of images, along with the number of images you want to extract from the Google search. For instance, let's assume you want to build a training and a validation set to distinguish a hockey player from a soccer player. As an example, the searchterms.csv file could look as follows:
 
 | search_term | number_imgs | folder_name | train_val |
@@ -56,6 +56,27 @@ data/
         
 ```
 Once this set is built, **make sure you take a quick look at the images**, to cleanup the dataset and remove the images not relevant to the classification problem at hand. Note that you can have multiple search terms for a given class of images, and that there is no limit to the number of different categories you want your model to classify. Note again that if you want to use this functionality, make sure to have your [chromedriver executable](http://chromedriver.chromium.org/) in the root directory.
+
+### Spliting a set of images into a training and a validation set
+If you have a single set of images, but would like to split it into a training and a validation set, first place your images in the data/image_dataset. Keeping the hockey and soccer players example, your dataset should be organized in the directory as follows:
+```
+data/
+  image_dataset/
+    train/
+      hockey_player/
+        hockey_player_1.jpg
+        hockey_player_2.jpg
+        ...
+      soccer_player/
+        soccer_player_1.jpg
+        soccer_player_2.jpg
+        ...        
+```
+Then, you can run the following command:
+```
+python main.py --task split_training --val_fraction 0.1
+```
+This will go through all the classes in the training set, randomly pick a fraction (*val_fraction* argument) of the images, and move them from the train/ directory to a newly created val/ directory.
 
 ### Training the classification model
 Once you have a dataset of images (in a train and a val directory, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
