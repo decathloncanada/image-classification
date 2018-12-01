@@ -25,6 +25,7 @@ from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.python.keras.callbacks import EarlyStopping
 from tensorflow.python.keras import backend as K
 import tensorflow as tf
 
@@ -156,10 +157,12 @@ class image_classifier():
     #optimize the hyperparameters of the model        
     def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
                                      display_plot=False, batch_size=20, use_TPU=False,
-                                     transfer_model='Inception'):
+                                     transfer_model='Inception', min_accuracy=None):
         """
+        min_accuracy: minimum value of categorical accuracy we want after 1 iteration
         num_iterations: number of hyperparameter combinations we try
         """
+        self.min_accuracy = min_accuracy
         self.batch_size = batch_size
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
@@ -199,7 +202,7 @@ class image_classifier():
 
         except:
             #fall back default values
-            default_parameters = [5, 1024, 1e-4, 0, False, 1, 'relu', True]
+            default_parameters = [5, 1024, 1e-4, 0, True, 1, 'relu', True]
         
         self.number_iterations = 0
     
@@ -225,7 +228,8 @@ class image_classifier():
             self.fit(epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
                     fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
                     include_class_weight=include_class_weight, batch_size=self.batch_size,
-                    use_TPU=self.use_TPU, transfer_model=self.transfer_model)
+                    use_TPU=self.use_TPU, transfer_model=self.transfer_model,
+                    min_accuracy=self.min_accuracy)
             
             #extract fitness
             fitness = self.fitness
@@ -272,7 +276,14 @@ class image_classifier():
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception'):
+            transfer_model='Inception', min_accuracy=None):
+        
+        #if we want stop training when no sufficient improvement in accuracy has been achieved
+        if min_accuracy is not None:
+            callback = EarlyStopping(monitor='categorical_accuracy', baseline=min_accuracy)
+            callback = [callback]
+        else:
+            callback = None
         
         #load the pretrained model, without the classification (top) layers
         if transfer_model=='Xception':
@@ -382,10 +393,15 @@ class image_classifier():
                                   verbose=verbose,
                                   class_weight=class_weight,
                                   validation_data=self.generator_val,
-                                  validation_steps=self.val_steps_per_epoch)
+                                  validation_steps=self.val_steps_per_epoch,
+                                  callbacks=callback)
         
         #Fine-tune the model, if we wish so
-        if fine_tuning:
+        if fine_tuning and not model.stop_training:
+            print('============')
+            print('Begin fine-tuning')
+            print('============')
+            
             #declare the first layers as trainable
             for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
                 layer.trainable = False
@@ -437,7 +453,12 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, save_augmented=False, transfer_model='Inception', epochs=1)
+    classifier.fit(save_model=False, epochs=2, hidden_size=222, 
+                   learning_rate=0.00024, save_augmented=False, 
+                   fine_tuning=True, transfer_model='Xception',
+                   activation='tanh', 
+                   include_class_weight=True,
+                   min_accuracy=0.4)
     classifier.confusion_matrix()
     classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)

@@ -22,13 +22,16 @@ from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.preprocessing.image import img_to_array
 from tensorflow.python.keras import models
 
+from utils.utils import split_train
+
 #extract the arguments
 parser = argparse.ArgumentParser(description='Extarct images, run hyperperameter search, fit the classifier, evalute the accuracy or predict the class')
 parser.add_argument('--task', type=str, default='pass',
                     help="""
                     task to perform: 
-                    extract_images-->save images from a Google images search
-                    hyperparameters --> optimize classifier hyperparameters; 
+                    extract_images-->build train, val and test sets from a Google Images search
+                    split_training-->split a set of images into a training and a validation set
+                    hyperparameters -->optimize classifier hyperparameters; 
                     fit-->fit the classifier (and optionaly save) the classifier; 
                     evaluate-->­­­calculate the accuracy on a given set of images
                     classify-->predict the probability that the image is from the possible classes
@@ -61,11 +64,19 @@ parser.add_argument('--use_TPU', type=int, default=0,
                     help="""
                     If we want (1) or not (0) to fit the model using a TPU
                     """)
+parser.add_argument('--val_fraction', type=float, default=0.1,
+                    help="""
+                    Fraction of training images to move to the validation set
+                    """)
+parser.add_argument('--min_accuracy', type=float, default=None,
+                    help="""
+                    Minimum training accuracy after 1 epoch to continue training
+                    """)
 
 args = parser.parse_args()
 
 #verify the format of the arguments
-if args.task not in ['extract_images', 'hyperparameters', 'fit', 'evaluate', 'classify', None]:
+if args.task not in ['extract_images', 'hyperparameters', 'fit', 'evaluate', 'classify', 'split_training', None]:
     print('Task not supported')
     args.task = 'pass'
 
@@ -115,6 +126,16 @@ else:
     else:
         target_size = (224, 224)
 
+if args.task == 'split_training':        
+    if not (args.val_fraction > 0 and isinstance(args.val_fraction, float) and args.val_fraction < 1):
+        print('val_fraction has to be a float number between 0 and 1')
+        args.task = 'pass'
+
+if args.min_accuracy is not None:          
+    if not (args.min_accuracy > 0 and isinstance(args.min_accuracy, float) and args.min_accuracy < 1):
+        print('min_accuracy has to be a float number between 0 and 1')
+        args.task = 'pass'
+
 #function to preprocess the image
 def prepare_image(image):
     #reshape the image
@@ -158,7 +179,12 @@ def hyperparameters():
     classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
                                             batch_size=args.batch_size,
                                             use_TPU=use_TPU,
-                                            transfer_model=args.transfer_model)
+                                            transfer_model=args.transfer_model,
+                                            min_accuracy = args.min_accuracy)
+    
+#function to split training set into a training/validation set
+def split_training():
+    split_train(split=args.val_fraction)
     
 #function to fit the model using saved hyperparameters (when available) 
 def fit():
@@ -179,6 +205,7 @@ def fit():
     classifier = ic.image_classifier()
     classifier.fit(save_model=save_model, use_TPU=use_TPU, 
                    transfer_model=args.transfer_model,
+                   min_accuracy = args.min_accuracy,
                    **opt_params)
     
 #function to evaluate the classification accuracy
@@ -207,3 +234,6 @@ elif args.task == 'classify':
     
 elif args.task == 'evaluate':
     evaluate()
+    
+elif args.task == 'split_training':
+    split_training()
