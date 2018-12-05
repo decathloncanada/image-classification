@@ -393,8 +393,7 @@ class image_classifier():
                                   verbose=verbose,
                                   class_weight=class_weight,
                                   validation_data=self.generator_val,
-                                  validation_steps=self.val_steps_per_epoch,
-                                  callbacks=callback)
+                                  validation_steps=self.val_steps_per_epoch)
         
         #Fine-tune the model, if we wish so
         if fine_tuning and not model.stop_training:
