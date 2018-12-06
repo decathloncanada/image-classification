@@ -275,7 +275,7 @@ class image_classifier():
     def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
-            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=0, use_TPU=False,
+            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
             transfer_model='Inception', min_accuracy=None):
         
         #if we want stop training when no sufficient improvement in accuracy has been achieved
