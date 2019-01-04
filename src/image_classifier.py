@@ -32,11 +32,13 @@ import tensorflow as tf
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir)
 
 TRAIN_DIR = parentdir + '/data/image_dataset/train'
 VAL_DIR = parentdir + '/data/image_dataset/val'
 TEST_DIR = parentdir + '/data/image_dataset/test'
 AUGMENTED_DIR = parentdir + '/data/augmented_dataset'
+from utils import utils
 
 class image_classifier():
     
@@ -157,7 +159,8 @@ class image_classifier():
     #optimize the hyperparameters of the model        
     def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
                                      display_plot=False, batch_size=20, use_TPU=False,
-                                     transfer_model='Inception', min_accuracy=None):
+                                     transfer_model='Inception', cutoff_regularization=False,
+                                     min_accuracy=None):
         """
         min_accuracy: minimum value of categorical accuracy we want after 1 iteration
         num_iterations: number of hyperparameter combinations we try
@@ -166,6 +169,7 @@ class image_classifier():
         self.batch_size = batch_size
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
+        self.cutoff_regularization = cutoff_regularization
         
         #import scikit-optimize libraries
         from skopt import gp_minimize
@@ -229,7 +233,7 @@ class image_classifier():
                     fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
                     include_class_weight=include_class_weight, batch_size=self.batch_size,
                     use_TPU=self.use_TPU, transfer_model=self.transfer_model,
-                    min_accuracy=self.min_accuracy)
+                    min_accuracy=self.min_accuracy, cutoff_regularization=self.cutoff_regularization)
             
             #extract fitness
             fitness = self.fitness
@@ -276,7 +280,7 @@ class image_classifier():
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception', min_accuracy=None):
+            transfer_model='Inception', min_accuracy=None, cutoff_regularization=False):
         
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
@@ -343,6 +347,12 @@ class image_classifier():
                   metrics=['categorical_accuracy'])
         
         #Define the dataset augmentation and batch generator
+        #if we include cutoff_regularization
+        if cutoff_regularization:
+            preprocessing_function = utils.get_random_eraser()
+        else:
+            preprocessing_function = None
+        
         datagen_train = ImageDataGenerator(rotation_range=180,
                                            rescale=1./255,
                                            width_shift_range=0.1,
@@ -351,7 +361,8 @@ class image_classifier():
                                            zoom_range=[0.9, 1.5],
                                            horizontal_flip=True,
                                            vertical_flip=True,
-                                           fill_mode='nearest'
+                                           fill_mode='nearest',
+                                           preprocessing_function=preprocessing_function
                                            )
                 
         datagen_val = ImageDataGenerator(rescale=1./255)
