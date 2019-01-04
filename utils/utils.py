@@ -42,7 +42,7 @@ def split_train(path=parentdir+'/data/image_dataset', split=0.1):
 
 #function to add cutoff regularization to image classification...
 #...taken from https://github.com/yu4u/cutout-random-erasing/blob/master/random_eraser.py            
-def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=1, pixel_level=False):
+def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=1, pixel_level=True):
     def eraser(input_img):
         img_h, img_w, img_c = input_img.shape
         p_1 = np.random.rand()
