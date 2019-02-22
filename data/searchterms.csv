@@ -1,37 +1,97 @@
 search_term,number_imgs,category,set
-hockey sticks,100,hockey_sticks,train
-hockey helmet,100,hockey_helmet,train
-hockey puck,100,hockey_puck,train
-hockey skates,100,hockey_skates,train
-hockey pants,100,hockey_pants,train
-hockey gloves,100,hockey_gloves,train
-hockey shoulder pads,100,shoulder_pads,train
-hockey elbow pads,100,elbow_pads,train
-hockey neck guards,100,neck_guards,train
-used hockey sticks,30,hockey_sticks,train
-used hockey helmet,30,hockey_helmet,train
-used hockey puck,30,hockey_puck,train
-used hockey skates,30,hockey_skates,train
-used hockey pants,30,hockey_pants,train
-used hockey gloves,30,hockey_gloves,train
-used hockey shoulder pads,30,shoulder_pads,train
-used hockey elbow pads,30,elbow_pads,train
-used hockey neck guards,30,neck_guards,train
-baton de hockey,50,hockey_sticks,train
-casque de hockey,50,hockey_helmet,train
-rondelle de hockey,50,hockey_puck,train
-patins de hockey,50,hockey_skates,train
-pantalons de hockey,50,hockey_pants,train
-gants de hockey,50,hockey_gloves,train
-epaulettes hockey,50,shoulder_pads,train
-protege coude hockey,50,elbow_pads,train
-protege cou hockey,50,neck_guards,train
-baton de hockey usage,20,hockey_sticks,val
-casque de hockey usage,20,hockey_helmet,val
-rondelle de hockey usage,20,hockey_puck,val
-patins de hockey usage,20,hockey_skates,val
-pantalons de hockey usage,20,hockey_pants,val
-gants de hockey usage,20,hockey_gloves,val
-epaulettes hockey usage,20,shoulder_pads,val
-protege coude hockey usage,20,elbow_pads,val
-protege cou hockey usage,20,neck_guards,val
+swimming,100,water_aerobics,train
+water polo,100,water_aerobics,train
+aquafit,100,water_aerobics,train
+running,100,athletics,train
+walking,100,athletics,train
+discuss throw,30,athletics,train
+hammer throw,30,athletics,train
+high jump,30,athletics,train
+Aizkora proba,30,basque_and_lumberjack_sports,train
+Giza-abere probak,30,basque_and_lumberjack_sports,train
+Harri jasotzea,30,basque_and_lumberjack_sports,train
+caber toss,30,basque_and_lumberjack_sports,train
+logrolling,30,basque_and_lumberjack_sports,train
+billiards,100,billiard_sports,train
+baseball,120,bat_and_ball_games,train
+cricket,120,bat_and_ball_games,train
+kickball,30,bat_and_ball_games,train
+kite,120,aircraft_activities,train
+boomerang,70,thow_and_catch_sports,train
+ultimate freesbee,30,thow_and_catch_sports,train
+martial arts,100,combat_sports,train
+fencing,50,combat_sports,train
+jujutsu,30,combat_sports,train
+wrestling,30,combat_sports,train
+judo,30,combat_sports,train
+orienteering,30,adventure_and_travel_sports,train
+hunting,100,adventure_and_travel_sports,train
+hiking,100,adventure_and_travel_sports,train
+fishing,100,adventure_and_travel_sports,train
+rowing,80,paddle_sports,train
+kayaking,80,paddle_sports,train
+raftings,80,paddle_sports,train
+canoeing,80,paddle_sports,train
+BMX,50,cycle_sports,train
+mountain bike,100,cycle_sports,train
+paracyling,50,cycle_sports,train
+spinning,50,cycle_sports,train
+hybrid biking,50,cycle_sports,train
+gymnastics,100,artistic_and_dance_sports,train
+trampolining,50,artistic_and_dance_sports,train
+cheerleading,80,artistic_and_dance_sports,train
+ballet,50,artistic_and_dance_sports,train
+diving,80,diving_sports,train
+underwater diving,80,diving_sports,train
+horse competition,50,equestrianism,train
+horseback riding,100,equestrianism,train
+horseback western riding,30,equestrianism,train
+cardio training,80,strength_training,train
+fitness,80,strength_training,train
+weight training,80,strength_training,train
+american football,100,football_sports,train
+rugby,100,football_sports,train
+soccer,100,football_sports,train
+golf,100,club_and_ball_sports,train
+minigolf,30,club_and_ball_sports,train
+basketball,100,basket_and_handball_sports,train
+netball,50,basket_and_handball_sports,train
+handball,100,basket_and_handball_sports,train
+hockey,100,stick_and_ball_sports,train
+floor hockey,30,stick_and_ball_sports,train
+ringette,50,stick_and_ball_sports,train
+sledge hockey,50,stick_and_ball_sports,train
+lacrosse,80,stick_and_ball_sports,train
+badminton,100,racquet_and_net_sports,train
+padel,50,racquet_and_net_sports,train
+peteca,50,racquet_and_net_sports,train
+racquetball,50,racquet_and_net_sports,train
+tennis,100,racquet_and_net_sports,train
+ice skating,100,skating_sports,train
+inline skating,50,skating_sports,train
+roller skating,50,skating_sports,train
+skiing,100,skiing_sports,train
+freestyle skiing,50,skiing_sports,train
+biathlon,50,skiing_sports,train
+ski mountaineering,30,skiing_sports,train
+slacklining,100,circus_discipline,train
+bobsleigh,80,sliding_sports,train
+luge,80,sliding_sports,train
+skeleton,80,sliding_sports,train
+sledding,80,sliding_sports,train
+power kite,50,board_sports,train
+surfing,100,board_sports,train
+windsurfing,50,board_sports,train
+skateboarding,100,board_sports,train
+scooter,50,board_sports,train
+shuffleboard,30,target_sports,train
+axe throwing,50,target_sports,train
+bowling,80,target_sports,train
+pétanque,80,target_sports,train
+archery,80,shooting_sports,train
+paintball,80,shooting_sports,train
+lasertag,50,shooting_sports,train
+wakeboarding,50,tow_sports,train
+water skiing,100,tow_sports,train
+yoga,100,relaxation_training,train
+meditation,100,relaxation_training,train

@@ -158,12 +158,13 @@ class image_classifier():
     
     #optimize the hyperparameters of the model        
     def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
-                                     display_plot=False, batch_size=20, use_TPU=False,
-                                     transfer_model='Inception', cutoff_regularization=False,
+                                     display_plot=False, batch_size=20, n_random_starts=10,
+                                     use_TPU=False, transfer_model='Inception', cutoff_regularization=False,
                                      min_accuracy=None):
         """
         min_accuracy: minimum value of categorical accuracy we want after 1 iteration
         num_iterations: number of hyperparameter combinations we try
+        n_random_starts: number of random combinations of hyperparameters first tried
         """
         self.min_accuracy = min_accuracy
         self.batch_size = batch_size
@@ -251,6 +252,7 @@ class image_classifier():
                             dimensions=dimensions,
                             acq_func='EI', # Expected Improvement.
                             n_calls=num_iterations,
+                            n_random_starts=n_random_starts,
                             x0=default_parameters)
         
         if save_results:

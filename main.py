@@ -42,7 +42,11 @@ parser.add_argument('--save_model', type=int, default=0,
                     """)
 parser.add_argument('--number_iterations', type=int, default=20,
                     help="""
-                    Number of iteractions to perform when doing an hyperparameter optimization. As to be greater than 10
+                    Number of iterations to perform when doing an hyperparameter optimization. As to be greater than parameters n_random_starts
+                    """)
+parser.add_argument('--n_random_starts', type=int, default=10,
+                    help="""
+                    Number of random combinations of hyperparameters to try first in the hyperparameters optimization
                     """)
 parser.add_argument('--img', type=str, default=None,
                     help="""
@@ -114,7 +118,7 @@ else:
     print('cutoff_regularization argument is not 0 or 1')
     args.task = 'pass'
 
-if not (args.number_iterations > 10 and isinstance(args.number_iterations, int)):
+if not (args.number_iterations > args.n_random_starts and isinstance(args.number_iterations, int)):
     print('number_iterations has to be an integer greater than 10')
     args.task = 'pass'
     
@@ -189,6 +193,7 @@ def extract_images():
 def hyperparameters():
     classifier = ic.image_classifier()
     classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
+                                            n_random_starts = args.n_random_starts,
                                             batch_size=args.batch_size,
                                             use_TPU=use_TPU,
                                             transfer_model=args.transfer_model,
