@@ -447,9 +447,9 @@ class image_classifier():
             
         #save model in production format
         if extract_SavedModel:
-            export_path = "./image_classifier/1/"
+            export_path = "./image_classifier/2/"
     
-            with tf.keras.backend.get_session() as sess:
+            with K.get_session() as sess:
                 tf.saved_model.simple_save(
                     sess,
                     export_path,
