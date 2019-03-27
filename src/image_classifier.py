@@ -282,7 +282,8 @@ class image_classifier():
             dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
             save_augmented=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception', min_accuracy=None, cutoff_regularization=False):
+            transfer_model='Inception', min_accuracy=None, cutoff_regularization=False,
+            extract_SavedModel=False):
         
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
@@ -443,6 +444,17 @@ class image_classifier():
                 os.makedirs(parentdir + '/data/trained_models')
             model.save(parentdir + '/data/trained_models/trained_model.h5')
             print('Model saved!')
+            
+        #save model in production format
+        if extract_SavedModel:
+            export_path = "./image_classifier/1/"
+    
+            with tf.keras.backend.get_session() as sess:
+                tf.saved_model.simple_save(
+                    sess,
+                    export_path,
+                    inputs={'input_image': model.input},
+                    outputs={t.name: t for t in model.outputs})
         
         self.model = model
         del history

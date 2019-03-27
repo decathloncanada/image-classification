@@ -40,6 +40,10 @@ parser.add_argument('--save_model', type=int, default=0,
                     help="""
                     If we want (1) or not (0) to save the model we are fitting
                     """)
+parser.add_argument('--extract_SavedModel', type=int, default=0,
+                    help="""
+                    If we want (1) or not (0) to save the model we are fitting in a production format
+                    """)
 parser.add_argument('--number_iterations', type=int, default=20,
                     help="""
                     Number of iterations to perform when doing an hyperparameter optimization. As to be greater than parameters n_random_starts
@@ -102,6 +106,14 @@ if args.task == 'fit':
         print('save_model argument is not 0 or 1')
         args.task = 'pass'
     
+    if args.extract_SavedModel == 1:
+        extract_SavedModel=True
+    elif args.extract_SavedModel == 0:
+        extract_SavedModel=False
+    else:
+        print('extract_SavedModel argument is not 0 or 1')
+        args.task = 'pass'
+        
 if args.use_TPU == 1:
     use_TPU=True
 elif args.use_TPU == 0:
@@ -221,7 +233,9 @@ def fit():
         opt_params = {}
     
     classifier = ic.image_classifier()
-    classifier.fit(save_model=save_model, use_TPU=use_TPU, 
+    classifier.fit(save_model=save_model, 
+                   extract_SavedModel=extract_SavedModel,
+                   use_TPU=use_TPU, 
                    cutoff_regularization=cutoff_regularization,
                    transfer_model=args.transfer_model,
                    min_accuracy = args.min_accuracy,
