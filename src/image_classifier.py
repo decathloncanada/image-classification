@@ -447,7 +447,7 @@ class image_classifier():
             
         #save model in production format
         if extract_SavedModel:
-            export_path = "./image_classifier/2/"
+            export_path = "./image_classifier/1/"
     
             with K.get_session() as sess:
                 tf.saved_model.simple_save(
@@ -456,9 +456,10 @@ class image_classifier():
                     inputs={'input_image': model.input},
                     outputs={t.name: t for t in model.outputs})
         
-        self.model = model
-        del history
-        del model
+        else:
+            self.model = model
+            del history
+            del model
             
     #evaluation of the accuracy of classification on the test set
     def evaluate(self, path, transfer_model='Inception'):
@@ -478,12 +479,12 @@ class image_classifier():
         
 if __name__ == '__main__':
     classifier = image_classifier()
-    classifier.fit(save_model=False, epochs=2, hidden_size=222, 
+    classifier.fit(save_model=False, epochs=1, hidden_size=222, 
                    learning_rate=0.00024, save_augmented=False, 
-                   fine_tuning=True, transfer_model='Xception',
+                   fine_tuning=False, transfer_model='Inception_Resnet',
                    activation='tanh', 
                    include_class_weight=True,
-                   min_accuracy=0.4)
-    classifier.confusion_matrix()
-    classifier.plot_errors()        
+                   min_accuracy=0.4, extract_SavedModel=True)
+#    classifier.confusion_matrix()
+#    classifier.plot_errors()        
 #    classifier._hyperparameter_optimization(num_iterations=20)
