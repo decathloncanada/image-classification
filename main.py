@@ -222,8 +222,7 @@ def fit():
     classifier = ic.image_classifier()
     classifier.fit(save_model=save_model, 
                    extract_SavedModel=extract_SavedModel,
-                   use_TPU=use_TPU, 
-                   cutoff_regularization=cutoff_regularization,
+                   use_TPU=use_TPU,
                    transfer_model=args.transfer_model,
                    min_accuracy = args.min_accuracy,
                    **opt_params)
