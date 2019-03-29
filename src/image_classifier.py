@@ -357,8 +357,7 @@ class image_classifier():
                                            zoom_range=[0.9, 1.5],
                                            horizontal_flip=True,
                                            vertical_flip=True,
-                                           fill_mode='nearest',
-                                           preprocessing_function=preprocessing_function
+                                           fill_mode='nearest'
                                            )
                 
         datagen_val = ImageDataGenerator(rescale=1./255)
