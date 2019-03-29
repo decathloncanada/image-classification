@@ -76,10 +76,6 @@ parser.add_argument('--val_fraction', type=float, default=0.1,
                     help="""
                     Fraction of training images to move to the validation set
                     """)
-parser.add_argument('--cutoff_regularization', type=int, default=0,
-                    help="""
-                    If we want (1) or not (0) to consider cutoff regularization for data augmentation
-                    """)
 parser.add_argument('--min_accuracy', type=float, default=None,
                     help="""
                     Minimum training accuracy after 1 epoch to continue training
@@ -122,14 +118,6 @@ else:
     print('use_TPU argument is not 0 or 1')
     args.task = 'pass'
     
-if args.cutoff_regularization == 1:
-    cutoff_regularization=True
-elif args.cutoff_regularization == 0:
-    cutoff_regularization=False
-else:
-    print('cutoff_regularization argument is not 0 or 1')
-    args.task = 'pass'
-
 if not (args.number_iterations > args.n_random_starts and isinstance(args.number_iterations, int)):
     print('number_iterations has to be an integer greater than 10')
     args.task = 'pass'
@@ -209,8 +197,7 @@ def hyperparameters():
                                             batch_size=args.batch_size,
                                             use_TPU=use_TPU,
                                             transfer_model=args.transfer_model,
-                                            min_accuracy = args.min_accuracy,
-                                            cutoff_regularization=cutoff_regularization)
+                                            min_accuracy = args.min_accuracy)
     
 #function to split training set into a training/validation set
 def split_training():

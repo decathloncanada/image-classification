@@ -38,7 +38,7 @@ TRAIN_DIR = parentdir + '/data/image_dataset/train'
 VAL_DIR = parentdir + '/data/image_dataset/val'
 TEST_DIR = parentdir + '/data/image_dataset/test'
 AUGMENTED_DIR = parentdir + '/data/augmented_dataset'
-from utils import utils
+
 
 class image_classifier():
     
@@ -348,14 +348,7 @@ class image_classifier():
             model.compile(optimizer=optimizer,
                   loss=loss,
                   metrics=['categorical_accuracy'])
-        
-        #Define the dataset augmentation and batch generator
-        #if we include cutoff_regularization
-        if cutoff_regularization:
-            preprocessing_function = utils.get_random_eraser()
-        else:
-            preprocessing_function = None
-        
+               
         datagen_train = ImageDataGenerator(rotation_range=180,
                                            rescale=1./255,
                                            width_shift_range=0.1,
