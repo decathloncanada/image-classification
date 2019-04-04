@@ -411,9 +411,14 @@ class image_classifier():
         validation_steps = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/val')]) / batch_size)
        
         #Fit the model
-        history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
-                      validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                      verbose=verbose, callbacks=callback, class_weight=class_weight)
+        if use_TPU:
+            history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+                          validation_data=get_validation_dataset, validation_steps=validation_steps,
+                          verbose=verbose, callbacks=callback, class_weight=class_weight)
+        else:
+            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+                          validation_data=get_validation_dataset(), validation_steps=validation_steps,
+                          verbose=verbose, callbacks=callback, class_weight=class_weight)
         
         #Fine-tune the model, if we wish so
         if fine_tuning and not model.stop_training:
@@ -432,9 +437,14 @@ class image_classifier():
                           metrics=['categorical_accuracy'])
             
             #Fit the model
-            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
-                      validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                      verbose=verbose, callbacks=callback, class_weight=class_weight)
+            if use_TPU:
+                history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+                              validation_data=get_validation_dataset, validation_steps=validation_steps,
+                              verbose=verbose, callbacks=callback, class_weight=class_weight)
+            else:
+                history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+                              validation_data=get_validation_dataset(), validation_steps=validation_steps,
+                              verbose=verbose, callbacks=callback, class_weight=class_weight)
             
         #Evaluate the model, just to be sure
         self.fitness = history.history['val_categorical_accuracy'][-1]
