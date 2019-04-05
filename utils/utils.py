@@ -17,7 +17,7 @@ parentdir = os.path.dirname(currentdir)
 from random import shuffle
 
 #function to verify images and convert them to RGB format
-def check_RGB(path=parentdir+'/data/image_dataset/train'):
+def check_RGB(path=parentdir+'/data/image_dataset/'):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -32,11 +32,15 @@ def check_RGB(path=parentdir+'/data/image_dataset/train'):
         imgs_paths = [os.path.abspath(os.path.join(i, j)) for j in imgs]
         #Loop through all the images in the path
         for img in imgs_paths:
-            if img.split(".")[1] == "jpg":
+            #try to open it
+            try:
                 jpg = Image.open(img).convert('RGB')
-                print("image: " + str(img) + " converted" )
                 jpg.save(str(img))
-            
+            except:
+                #delete the file
+                print('Deleting', img)
+                os.remove(img)   
+                
 
 def split_train(path=parentdir+'/data/image_dataset', split=0.1):
     """
