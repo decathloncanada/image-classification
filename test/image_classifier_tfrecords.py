@@ -308,28 +308,16 @@ class image_classifier():
             image = tf.image.decode_jpeg(example['image'])
             image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
             image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
-            image = tf.reshape(image, [*target_size, 3])
+            feature = tf.reshape(image, [*target_size, 3])
             label = tf.cast(example['label'], tf.int32)  # byte string
-            one_hot_label = tf.one_hot(label, len(self.categories))
-            return image, one_hot_label
-        
-        def load_dataset(filenames):  
-          # read from tfrecs
-          records = tf.data.TFRecordDataset(filenames, num_parallel_reads=32)  # this will read from multiple GCS files in parallel
-          dataset = records.map(read_tfrecord, num_parallel_calls=32)
-          return dataset
-      
-        def features_and_targets(image, one_hot_label):
-          feature = image
-          target = one_hot_label
-          return feature, target  # for training, a Keras model needs 2 items: features and targets
+            target = tf.one_hot(label, len(self.categories))
+            return feature, target
         
         def get_batched_dataset(filenames):
-          dataset = load_dataset(filenames)
-          dataset = dataset.shuffle(1000) 
-          dataset = dataset.map(features_and_targets, num_parallel_calls=32)
-          dataset = dataset.cache()  # Cache the dataset
+          dataset = tf.data.TFRecordDataset(filenames)  # this will read from multiple GCS files in parallel
+          dataset = dataset.map(read_tfrecord)
           dataset = dataset.repeat()
+          dataset = dataset.shuffle(1000) 
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
           dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
           return dataset
