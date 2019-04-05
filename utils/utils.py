@@ -9,11 +9,34 @@ split_train: function to build a validation set from a training set of images.
 @author: AI team
 """
 import numpy as np
+from PIL import Image
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 
 from random import shuffle
+
+#function to verify images and convert them to RGB format
+def check_RGB(path=parentdir+'/data/image_dataset/train'):
+    """
+    path: path to the image_dataset directory, which includes a train subdirectory, in
+    which we have a folder per category we want to classify. The function will generate,
+    a val subdirectly, in which we move a portion of the training images
+    """
+
+    classes = os.listdir(path)
+    classes_paths = [os.path.abspath(os.path.join(path, i)) for i in classes]
+    
+    for i in classes_paths:
+        imgs = os.listdir(i)
+        imgs_paths = [os.path.abspath(os.path.join(i, j)) for j in imgs]
+        #Loop through all the images in the path
+        for img in imgs_paths:
+            if img.split(".")[1] == "jpg":
+                jpg = Image.open(img).convert('RGB')
+                print("image: " + str(img) + " converted" )
+                jpg.save(str(img))
+            
 
 def split_train(path=parentdir+'/data/image_dataset', split=0.1):
     """
