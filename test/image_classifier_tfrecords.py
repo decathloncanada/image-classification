@@ -328,7 +328,7 @@ class image_classifier():
           dataset = load_dataset(filenames)
           dataset = dataset.shuffle(1000) 
           dataset = dataset.map(features_and_targets, num_parallel_calls=32)
-          dataset = dataset.cache()  # This dataset fits in RAM
+          dataset = dataset.cache(('/tmp/cache'))  # Cache the dataset
           dataset = dataset.repeat()
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
           dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
