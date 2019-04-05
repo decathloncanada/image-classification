@@ -328,17 +328,17 @@ class image_classifier():
           dataset = load_dataset(filenames)
           dataset = dataset.shuffle(1000) 
           dataset = dataset.map(features_and_targets, num_parallel_calls=32)
-#          dataset = dataset.cache(('/tmp/cache'))  # Cache the dataset
+          dataset = dataset.cache()  # Cache the dataset
           dataset = dataset.repeat()
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
           dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
           return dataset
         
         def get_training_dataset():
-          return get_batched_dataset([parentdir + '/data/image_dataset/train.tfrecord'])
+          return get_batched_dataset(['train.tfrecord'])
         
         def get_validation_dataset():
-          return get_batched_dataset([parentdir + '/data/image_dataset/val.tfrecord'])
+          return get_batched_dataset(['val.tfrecord'])
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
