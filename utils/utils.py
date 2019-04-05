@@ -17,7 +17,7 @@ parentdir = os.path.dirname(currentdir)
 from random import shuffle
 
 #function to verify images and convert them to RGB format
-def check_RGB(path=parentdir+'/data/image_dataset/'):
+def check_RGB(path=parentdir+'/data/image_dataset/train/'):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
