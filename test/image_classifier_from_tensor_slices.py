@@ -34,6 +34,7 @@ from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.callbacks import EarlyStopping
 from tensorflow.python.keras.preprocessing.image import img_to_array
 from tensorflow.python.keras import backend as K
+from tensorflow.losses import sparse_softmax_cross_entropy
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -395,7 +396,7 @@ class image_classifier():
             #...and https://www.youtube.com/watch?v=jgNwywYcH4w
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)    
             model.compile(optimizer=optimizer,
-                  loss=loss,
+                  loss=sparse_softmax_cross_entropy,
                   metrics=['acc'])
             
             TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
