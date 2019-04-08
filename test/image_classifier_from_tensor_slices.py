@@ -329,7 +329,7 @@ class image_classifier():
                     x.append(prepare_image(img_path))
                     y = y + [i]
                     
-            return (np.array(x), np.array(y).astype(np.int64))
+            return (np.array(x), np.array(y).astype(np.int32))
         
         #get training data
         (x_train, y_train) = generate_tuples(parentdir + '/data/image_dataset/train')
