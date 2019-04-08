@@ -287,6 +287,11 @@ class image_classifier():
             transfer_model='Inception', min_accuracy=None,
             extract_SavedModel=False):
         
+        #read the tfrecords data
+        TRAIN_DATA = tf.data.TFRecordDataset(['train.tfrecord'])
+        VAL_DATA = tf.data.TFRecordDataset(['val.tfrecord'])
+        print('Read the TFrecords')
+        
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
         else:
@@ -313,20 +318,21 @@ class image_classifier():
             target = tf.one_hot(label, len(self.categories))
             return feature, target
         
-        def get_batched_dataset(filenames):
-          dataset = tf.data.TFRecordDataset(filenames)  # this will read from multiple GCS files in parallel
-          dataset = dataset.map(read_tfrecord)
+        def get_training_dataset():
+          dataset = TRAIN_DATA.map(read_tfrecord)
           dataset = dataset.repeat()
           dataset = dataset.shuffle(1000) 
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
           dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
           return dataset
-        
-        def get_training_dataset():
-          return get_batched_dataset(['train.tfrecord'])
-        
+      
         def get_validation_dataset():
-          return get_batched_dataset(['val.tfrecord'])
+          dataset = VAL_DATA.map(read_tfrecord)
+          dataset = dataset.repeat()
+          dataset = dataset.shuffle(1000) 
+          dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
+          dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
+          return dataset
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:

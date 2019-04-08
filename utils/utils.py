@@ -27,6 +27,7 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
     classes = os.listdir(path)
     classes_paths = [os.path.abspath(os.path.join(path, i)) for i in classes]
     
+    counter = 0
     for i in classes_paths:
         imgs = os.listdir(i)
         imgs_paths = [os.path.abspath(os.path.join(i, j)) for j in imgs]
@@ -40,6 +41,9 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
                 #delete the file
                 print('Deleting', img)
                 os.remove(img)   
+            counter += 1
+            if counter % 1000 == 1:
+                print('Verified', counter, 'images')
                 
 
 def split_train(path=parentdir+'/data/image_dataset', split=0.1):
