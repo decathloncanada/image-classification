@@ -394,8 +394,7 @@ class image_classifier():
             #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
             #...and https://www.youtube.com/watch?v=jgNwywYcH4w
             optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)    
-            tpu_optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
-            model.compile(optimizer=tpu_optimizer,
+            model.compile(optimizer=optimizer,
                   loss=loss,
                   metrics=['acc'])
             
