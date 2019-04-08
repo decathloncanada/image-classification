@@ -12,7 +12,7 @@ This file: an attempt to read tf records
 @author: AI team
 """
 import tensorflow as tf
-tf.enable_eager_execution()
+#tf.enable_eager_execution()
 
 import dill
 import matplotlib.pyplot as plt
@@ -20,6 +20,8 @@ import numpy as np
 import os
 import pickle as pickle
 import random
+from PIL import Image
+import PIL
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.applications.xception import Xception
@@ -30,6 +32,7 @@ from tensorflow.python.keras.layers import Dense, GlobalAveragePooling2D, Dropou
 from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.callbacks import EarlyStopping
+from tensorflow.python.keras.preprocessing.image import img_to_array
 from tensorflow.python.keras import backend as K
 
 import os,sys,inspect
@@ -286,12 +289,7 @@ class image_classifier():
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
             transfer_model='Inception', min_accuracy=None,
             extract_SavedModel=False):
-        
-        #read the tfrecords data
-        TRAIN_DATA = tf.data.TFRecordDataset(['train.tfrecord'])
-        VAL_DATA = tf.data.TFRecordDataset(['val.tfrecord'])
-        print('Read the TFrecords')
-        
+                
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
         else:
@@ -301,44 +299,64 @@ class image_classifier():
         self.categories = os.listdir(TRAIN_DIR)
             
         """
-        helper functions to load tfrecords. Strongly inspired by
-        https://colab.research.google.com/github/GoogleCloudPlatform/training-data-analyst/blob/master/courses/fast-and-lean-data-science/07_Keras_Flowers_TPU_playground.ipynb#scrollTo=LtAVr-4CP1rp
+        helper functions to to build tensors
+        inspired by https://www.tensorflow.org/tutorials/load_data/images
         """
-        def read_tfrecord(example):
-            features = {
-                "image": tf.FixedLenFeature((), tf.string), # tf.string means byte string
-                "label": tf.FixedLenFeature((), tf.int64)
-            }
-            example = tf.parse_single_example(example, features)
-            image = tf.image.decode_jpeg(example['image'])
-            image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
-            image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
-            feature = tf.reshape(image, [*target_size, 3])
-            label = tf.cast(example['label'], tf.int32)  # byte string
-            target = tf.one_hot(label, len(self.categories))
-            return feature, target
+        def prepare_image(img_path):
+            #reshape the image
+            image = Image.open(img_path)
+            image = image.resize(target_size, PIL.Image.BILINEAR).convert("RGB")
+            #convert the image into a numpy array, and expend to a size 4 tensor
+            image = img_to_array(image)
+            #rescale the pixels to a 0-1 range
+            image = image.astype(np.float32)/255
+            return image
         
-        def get_training_dataset():
-          dataset = TRAIN_DATA.map(read_tfrecord)
-          dataset = dataset.cache()
-          dataset = dataset.repeat()
-          dataset = dataset.shuffle(1000) 
-          dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
-          dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
-          return dataset
-      
-        def get_validation_dataset():
-          dataset = VAL_DATA.map(read_tfrecord)
-          dataset = dataset.cache()
-          dataset = dataset.repeat()
-          dataset = dataset.shuffle(1000) 
-          dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
-          dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
-          return dataset
-             
+        def generate_tuples(img_folder):        
+            #loop through all the images
+            # Get all file names of images present in folder
+            classes = os.listdir(img_folder)
+            classes_paths = [os.path.abspath(os.path.join(img_folder, i)) for i in classes]
+            x = []
+            y = []
+    
+            for i, j in enumerate(classes):
+                #for all the classes, get the list of pictures
+                img_paths = os.listdir(classes_paths[i])    
+                img_paths = [os.path.abspath(os.path.join(classes_paths[i], x)) for x in img_paths]
+                
+                for img_path in img_paths:
+                    x.append(prepare_image(img_path))
+                    y = y + [i]
+                    
+            return (np.array(x), np.array(y).astype(np.int64))
+        
+        #get training data
+        (x_train, y_train) = generate_tuples(parentdir + '/data/image_dataset/train')
+        (x_val, y_val) = generate_tuples(parentdir + '/data/image_dataset/val')
+        
+        #train input_function: see https://colab.research.google.com/drive/1F8txK1JLXKtAkcvSRQz2o7NSTNoksuU2#scrollTo=abbwQQfH0td3
+        def get_training_dataset(batch_size=batch_size):
+            # Convert the inputs to a Dataset.
+            dataset = tf.data.Dataset.from_tensor_slices((x_train,y_train))
+        
+            # Shuffle, repeat, and batch the examples.
+            dataset = dataset.shuffle(1000).repeat().batch(batch_size, drop_remainder=True)
+            
+            return dataset
+            
+        def get_validation_dataset(batch_size=batch_size):
+            # Convert the inputs to a Dataset.
+            dataset = tf.data.Dataset.from_tensor_slices((x_val,y_val))
+        
+            # Shuffle, repeat, and batch the examples.
+            dataset = dataset.shuffle(1000).repeat().batch(batch_size, drop_remainder=True)
+
+            return dataset
+                         
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
-            callback = EarlyStopping(monitor='categorical_accuracy', baseline=min_accuracy)
+            callback = EarlyStopping(monitor='acc', baseline=min_accuracy)
             callback = [callback]
         else:
             callback = None
@@ -370,7 +388,7 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model 
-        loss = 'categorical_crossentropy'  
+        loss = 'sparse_categorical_crossentropy'  
         if use_TPU:
             #if we want to try out the TPU, it looks like we currently need to use
             #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
@@ -379,7 +397,7 @@ class image_classifier():
             tpu_optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
             model.compile(optimizer=tpu_optimizer,
                   loss=loss,
-                  metrics=['categorical_accuracy'])
+                  metrics=['acc'])
             
             TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
             model = tf.contrib.tpu.keras_to_tpu_model(model,
@@ -388,10 +406,10 @@ class image_classifier():
             tf.logging.set_verbosity(tf.logging.INFO)
             
         else:
-            optimizer = Adam(lr=learning_rate)
+            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
             model.compile(optimizer=optimizer,
                   loss=loss,
-                  metrics=['categorical_accuracy'])
+                  metrics=['acc'])
         
         #if we want to weight the classes given the imbalanced number of images
         if include_class_weight:
@@ -428,9 +446,9 @@ class image_classifier():
             for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
                 layer.trainable = True
                 
-            model.compile(optimizer=Adam(lr=learning_rate*0.1),   
+            model.compile(optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate*0.1),   
                           loss=loss,
-                          metrics=['categorical_accuracy'])
+                          metrics=['acc'])
             
             #Fit the model
             if use_TPU:
