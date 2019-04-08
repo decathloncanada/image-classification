@@ -11,6 +11,8 @@ This file: an attempt to read tf records
 
 @author: AI team
 """
+import tensorflow as tf
+tf.enable_eager_execution()
 
 import dill
 import matplotlib.pyplot as plt
@@ -29,7 +31,6 @@ from tensorflow.python.keras.optimizers import Adam
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.callbacks import EarlyStopping
 from tensorflow.python.keras import backend as K
-import tensorflow as tf
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -320,6 +321,7 @@ class image_classifier():
         
         def get_training_dataset():
           dataset = TRAIN_DATA.map(read_tfrecord)
+          dataset = dataset.cache()
           dataset = dataset.repeat()
           dataset = dataset.shuffle(1000) 
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
@@ -328,6 +330,7 @@ class image_classifier():
       
         def get_validation_dataset():
           dataset = VAL_DATA.map(read_tfrecord)
+          dataset = dataset.cache()
           dataset = dataset.repeat()
           dataset = dataset.shuffle(1000) 
           dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
