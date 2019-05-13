@@ -13,6 +13,7 @@ This file: an attempt to read tf records
 """
 import tensorflow as tf
 tf.enable_eager_execution()
+AUTO = tf.data.experimental.AUTOTUNE
 
 import dill
 import matplotlib.pyplot as plt
@@ -280,16 +281,15 @@ class image_classifier():
         print('Optimal fitness value of:', -float(self.search_result.fun))
     
     #we fit the model given the images in the training set
-    def fit(self, learning_rate=1e-4, epochs=5, activation='relu',
-            dropout=0, hidden_size=1024, nb_layers=1, include_class_weight=False,
-            batch_size=20, save_model=False, verbose=True,
+    def fit(self,train_record_folder, val_record_folder, learning_rate=1e-4, 
+            epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
+            include_class_weight=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception', min_accuracy=None,
-            extract_SavedModel=False):
+            transfer_model='Inception', min_accuracy=None, extract_SavedModel=False):
         
         #read the tfrecords data
-        TRAIN_DATA = tf.data.TFRecordDataset(['train.tfrecord'])
-        VAL_DATA = tf.data.TFRecordDataset(['val.tfrecord'])
+        TRAIN_DATA = tf.data.TFRecordDataset(train_record_folder+'train.tfrecord')
+        VAL_DATA = tf.data.TFRecordDataset(train_record_folder+'val.tfrecord')
         print('Read the TFrecords')
         
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
@@ -298,6 +298,7 @@ class image_classifier():
             target_size = (224, 224)
             
         #We expect the classes to be the name of the folders in the training set
+        print(TRAIN_DIR)
         self.categories = os.listdir(TRAIN_DIR)
             
         """
@@ -372,19 +373,21 @@ class image_classifier():
         #Define the optimizer and the loss, and compile the model 
         loss = 'categorical_crossentropy'  
         if use_TPU:
-            #if we want to try out the TPU, it looks like we currently need to use
-            #tensorflow optimizers...see https://stackoverflow.com/questions/52940552/valueerror-operation-utpu-140462710602256-varisinitializedop-has-been-marked
-            #...and https://www.youtube.com/watch?v=jgNwywYcH4w
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)    
-            tpu_optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
-            model.compile(optimizer=tpu_optimizer,
-                  loss=loss,
-                  metrics=['categorical_accuracy'])
+            batch_size *= 8; # tpu needs batch_size * 8 to separe load on each core
+            # as of tf1.12 call to keras_to_tpu_model is no longer necessary
+            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            tpu_address = 'grpc://' + os.environ['COLAB_TPU_ADDR']
+            cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
+            # https://www.youtube.com/watch?v=kPMpmcl_Pyw
+            # step per run : number of batchs to run before getting back, yoou dont want the tpu to report avec each batch for performance reason 
+            strategy = tf.contrib.distribute.TPUStrategy(cluster_resolver, steps_per_run=100)
             
-            TPU_WORKER = 'grpc://' + os.environ['COLAB_TPU_ADDR']
-            model = tf.contrib.tpu.keras_to_tpu_model(model,
-                                                      strategy=tf.contrib.tpu.TPUDistributionStrategy(
-                                                              tf.contrib.cluster_resolver.TPUClusterResolver(TPU_WORKER)))
+            model.compile(loss=loss,
+                          optimizer=optimizer,
+                          metrics=['categorical_accuracy'],
+                          distribute=strategy)
+            
+            
             tf.logging.set_verbosity(tf.logging.INFO)
             
         else:
@@ -407,14 +410,10 @@ class image_classifier():
         validation_steps = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/val')]) / batch_size)
        
         #Fit the model
-        if use_TPU:
-            history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
-                          validation_data=get_validation_dataset, validation_steps=validation_steps,
-                          verbose=verbose, callbacks=callback, class_weight=class_weight)
-        else:
-            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
-                          validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                          verbose=verbose, callbacks=callback, class_weight=class_weight)
+        # call to model.fit is the same w/wo tpu
+        history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+                            validation_data=get_validation_dataset(), validation_steps=validation_steps,
+                            verbose=verbose, callbacks=callback, class_weight=class_weight)
         
         #Fine-tune the model, if we wish so
         if fine_tuning and not model.stop_training:
@@ -433,14 +432,9 @@ class image_classifier():
                           metrics=['categorical_accuracy'])
             
             #Fit the model
-            if use_TPU:
-                history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
-                              validation_data=get_validation_dataset, validation_steps=validation_steps,
-                              verbose=verbose, callbacks=callback, class_weight=class_weight)
-            else:
-                history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
-                              validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                              verbose=verbose, callbacks=callback, class_weight=class_weight)
+            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+                                validation_data=get_validation_dataset(), validation_steps=validation_steps,
+                                verbose=verbose, callbacks=callback, class_weight=class_weight)
             
         #Evaluate the model, just to be sure
         self.fitness = history.history['val_categorical_accuracy'][-1]
