@@ -11,9 +11,14 @@ This file: an attempt to read tf records
 
 @author: AI team
 """
-import tensorflow as tf
-tf.enable_eager_execution()
+import tensorflow as tf 
 AUTO = tf.data.experimental.AUTOTUNE
+tf.logging.set_verbosity(tf.logging.INFO)
+# Does the TPU support eager mode?
+# No, eager mode uses a new dynamic execution engine, while the TPU uses XLA, which performs static compilation of the execution graph.
+# https://cloud.google.com/tpu/docs/faq
+# tf.enable_eager_execution()
+
 
 import dill
 import matplotlib.pyplot as plt
@@ -281,37 +286,51 @@ class image_classifier():
         print('Optimal fitness value of:', -float(self.search_result.fun))
     
     #we fit the model given the images in the training set
-    def fit(self,train_record_folder, val_record_folder, learning_rate=1e-4, 
+    def fit(self,tfrecords_folder, learning_rate=1e-4, 
             epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
-            fine_tuning=False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
+            fine_tuning =False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
             transfer_model='Inception', min_accuracy=None, extract_SavedModel=False):
         
-        #read the tfrecords data
-        TRAIN_DATA = tf.data.TFRecordDataset(train_record_folder+'train.tfrecord')
-        VAL_DATA = tf.data.TFRecordDataset(train_record_folder+'val.tfrecord')
+        #tfrecords data filenames
+        TRAIN_DATA = os.path.join(tfrecords_folder, 'train.tfrecord')
+        VAL_DATA = os.path.join(tfrecords_folder, 'val.tfrecord')
         print('Read the TFrecords')
+        
+        if use_TPU:
+            batch_size *= 8; # tpu needs batch_size * 8 to separe load on each core
+            
+        #We expect the classes to be the name of the folders in the training set
+        print(TRAIN_DIR)
+        self.categories = os.listdir(TRAIN_DIR)
+        
+        steps_per_epoch = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/train')]) / batch_size)
+        validation_steps = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/val')]) / batch_size)
         
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
         else:
             target_size = (224, 224)
             
-        #We expect the classes to be the name of the folders in the training set
-        print(TRAIN_DIR)
-        self.categories = os.listdir(TRAIN_DIR)
+        
             
         """
         helper functions to load tfrecords. Strongly inspired by
         https://colab.research.google.com/github/GoogleCloudPlatform/training-data-analyst/blob/master/courses/fast-and-lean-data-science/07_Keras_Flowers_TPU_playground.ipynb#scrollTo=LtAVr-4CP1rp
         """
         def read_tfrecord(example):
+
             features = {
-                "image": tf.FixedLenFeature((), tf.string), # tf.string means byte string
-                "label": tf.FixedLenFeature((), tf.int64)
+            'filename': tf.FixedLenFeature((), tf.string),
+            'rows': tf.FixedLenFeature((), tf.int64),
+            'cols': tf.FixedLenFeature((), tf.int64),
+            'channels': tf.FixedLenFeature((), tf.int64),
+            'image': tf.FixedLenFeature((), tf.string),
+            'label': tf.FixedLenFeature((), tf.int64),
+#           'one_hot_label': tf.train.Feature(bytes_list = tf.train.BytesList(value = [one_hot_label.numpy().tobytes()]))
             }
             example = tf.parse_single_example(example, features)
-            image = tf.image.decode_jpeg(example['image'])
+            image = tf.image.decode_jpeg(example['image'],channels=3)
             image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
             image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
             feature = tf.reshape(image, [*target_size, 3])
@@ -319,23 +338,38 @@ class image_classifier():
             target = tf.one_hot(label, len(self.categories))
             return feature, target
         
-        def get_training_dataset():
-          dataset = TRAIN_DATA.map(read_tfrecord)
-          dataset = dataset.cache()
-          dataset = dataset.repeat()
-          dataset = dataset.shuffle(1000) 
-          dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
-          dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
-          return dataset
+        def load_dataset(filenames):
+            # read from TFRecords. For optimal performance, use "interleave(tf.data.TFRecordDataset, ...)"
+            # to read from multiple TFRecord files at once and set the option experimental_deterministic = False
+            # to allow order-altering optimizations.
+        
+            # option_no_order = tf.data.Options()
+            # option_no_order.experimental_deterministic = False
+        
+            # dataset = tf.data.Dataset.list_files(GCS_PATTERN)
+            # dataset = dataset.with_options(option_no_order)
+            dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=16)
+            # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=16, num_parallel_calls=AUTO) # faster
+            dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO)
+            # dataset = dataset.apply(tf.data.experimental.map_and_batch(read_tfrecord, batch_size, drop_remainder=True, num_parallel_calls=AUTO))
+            return dataset
       
+        def get_batched_dataset(filemames, shuffle=False):
+            dataset = load_dataset(filemames)
+            dataset = dataset.cache()
+            # dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(buffer_size=1024))
+            if shuffle:
+                dataset = dataset.shuffle(1000)
+            dataset = dataset.repeat()
+            dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
+            dataset = dataset.prefetch(AUTO) # prefetch next batch while training (AUTO: autotune prefetch buffer size)
+            return dataset
+      
+        def get_training_dataset():
+            return get_batched_dataset(TRAIN_DATA, shuffle=True)
+
         def get_validation_dataset():
-          dataset = VAL_DATA.map(read_tfrecord)
-          dataset = dataset.cache()
-          dataset = dataset.repeat()
-          dataset = dataset.shuffle(1000) 
-          dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
-          dataset = dataset.prefetch(-1) # prefetch next batch while training (-1: autotune prefetch buffer size)
-          return dataset
+            return get_batched_dataset(VAL_DATA)
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
@@ -371,31 +405,17 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model 
-        loss = 'categorical_crossentropy'  
-        if use_TPU:
-            batch_size *= 8; # tpu needs batch_size * 8 to separe load on each core
-            # as of tf1.12 call to keras_to_tpu_model is no longer necessary
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-            tpu_address = 'grpc://' + os.environ['COLAB_TPU_ADDR']
-            cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(tpu=tpu_address)
-            # https://www.youtube.com/watch?v=kPMpmcl_Pyw
-            # step per run : number of batchs to run before getting back, yoou dont want the tpu to report avec each batch for performance reason 
-            strategy = tf.contrib.distribute.TPUStrategy(cluster_resolver, steps_per_run=100)
-            
-            model.compile(loss=loss,
-                          optimizer=optimizer,
-                          metrics=['categorical_accuracy'],
-                          distribute=strategy)
-            
-            
-            tf.logging.set_verbosity(tf.logging.INFO)
-            
-        else:
-            optimizer = Adam(lr=learning_rate)
-            model.compile(optimizer=optimizer,
-                  loss=loss,
-                  metrics=['categorical_accuracy'])
+        loss = 'categorical_crossentropy'
+        optimizer = 'adam'
+        model.compile(optimizer=optimizer,
+              loss=loss,
+              metrics=['categorical_accuracy'])
         
+        if use_TPU:
+            tpu = tf.contrib.cluster_resolver.TPUClusterResolver() # TPU detection
+            strategy = tf.contrib.tpu.TPUDistributionStrategy(tpu)
+            tpu_model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+            
         #if we want to weight the classes given the imbalanced number of images
         if include_class_weight:
             from sklearn.utils.class_weight import compute_class_weight
@@ -405,15 +425,19 @@ class image_classifier():
                                     y=cls_train)
         else:
             class_weight = None
-            
-        steps_per_epoch = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/train')]) / batch_size)
-        validation_steps = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/val')]) / batch_size)
        
         #Fit the model
-        # call to model.fit is the same w/wo tpu
-        history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+        if use_TPU:
+            # Little wrinkle: reading directly from dataset object not yet implemented
+            # for Keras/TPU. Please use a function that returns a dataset.
+            history = tpu_model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+                            validation_data=get_validation_dataset, validation_steps=validation_steps,
+                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+        else:
+            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset(), validation_steps=validation_steps,
                             verbose=verbose, callbacks=callback, class_weight=class_weight)
+        
         
         #Fine-tune the model, if we wish so
         if fine_tuning and not model.stop_training:
@@ -432,9 +456,17 @@ class image_classifier():
                           metrics=['categorical_accuracy'])
             
             #Fit the model
-            history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
-                                validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                                verbose=verbose, callbacks=callback, class_weight=class_weight)
+            if use_TPU:
+                tpu_model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+                # Little wrinkle: reading directly from dataset object not yet implemented
+                # for Keras/TPU. Please use a function that returns a dataset.
+                history = tpu_model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+                            validation_data=get_validation_dataset, validation_steps=validation_steps,
+                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+            else:
+                history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
+                            validation_data=get_validation_dataset(), validation_steps=validation_steps,
+                            verbose=verbose, callbacks=callback, class_weight=class_weight)
             
         #Evaluate the model, just to be sure
         self.fitness = history.history['val_categorical_accuracy'][-1]
