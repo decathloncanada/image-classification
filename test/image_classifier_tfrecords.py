@@ -165,7 +165,7 @@ class image_classifier():
         
     
     #optimize the hyperparameters of the model        
-    def _hyperparameter_optimization(self, num_iterations=30, save_results=True,
+    def _hyperparameter_optimization(self, tfrecords_folder, num_iterations=30, save_results=True,
                                      display_plot=False, batch_size=20, n_random_starts=10,
                                      use_TPU=False, transfer_model='Inception', cutoff_regularization=False,
                                      min_accuracy=None):
@@ -174,8 +174,8 @@ class image_classifier():
         num_iterations: number of hyperparameter combinations we try
         n_random_starts: number of random combinations of hyperparameters first tried
         """
-        if use_TPU:
-            batch_size *= 8
+        
+        self.tfrecords_folder = tfrecords_folder
         self.min_accuracy = min_accuracy
         self.batch_size = batch_size
         self.use_TPU = use_TPU
@@ -240,11 +240,12 @@ class image_classifier():
             print()
             
             #fit the model
-            self.fit(epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
+            self.fit(self.tfrecords_folder, epochs=epochs, hidden_size=hidden_size, learning_rate=learning_rate, dropout=dropout, 
                     fine_tuning=fine_tuning, nb_layers=nb_layers, activation=activation,
                     include_class_weight=include_class_weight, batch_size=self.batch_size,
                     use_TPU=self.use_TPU, transfer_model=self.transfer_model,
-                    min_accuracy=self.min_accuracy, cutoff_regularization=self.cutoff_regularization)
+                    min_accuracy=self.min_accuracy)
+                    # min_accuracy=self.min_accuracy, cutoff_regularization=self.cutoff_regularization)
             
             #extract fitness
             fitness = self.fitness
@@ -394,9 +395,14 @@ class image_classifier():
         for layer in base_model.layers:
             layer.trainable = False
             
-        #Define the optimizer and the loss, and compile the model 
+        #Define the optimizer and the loss, and compile the model
+        if use_TPU:
+            # Only way to update TPU optimizer with arguments is to use tf optimizer
+            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+            optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+        else:
+            optimizer = Adam(lr=learning_rate)
         loss = 'categorical_crossentropy'
-        optimizer = 'adam'
         model.compile(optimizer=optimizer,
               loss=loss,
               metrics=['categorical_accuracy'])
@@ -446,7 +452,7 @@ class image_classifier():
             
             print('Recompiling model')
             if use_TPU:
-                 # Only way to update TPU optimizer with arguments is to use tf optimizer
+                # TPU works best with tf optimizer
                 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate*0.1)
                 optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
             else:
