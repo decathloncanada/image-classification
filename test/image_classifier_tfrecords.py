@@ -174,6 +174,8 @@ class image_classifier():
         num_iterations: number of hyperparameter combinations we try
         n_random_starts: number of random combinations of hyperparameters first tried
         """
+        if use_TPU:
+            batch_size *= 8
         self.min_accuracy = min_accuracy
         self.batch_size = batch_size
         self.use_TPU = use_TPU
@@ -290,12 +292,8 @@ class image_classifier():
             epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning =False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception', min_accuracy=None, extract_SavedModel=False):
-        
-        #tfrecords data filenames
-        TRAIN_DATA = os.path.join(tfrecords_folder, 'train.tfrecord')
-        VAL_DATA = os.path.join(tfrecords_folder, 'val.tfrecord')
-        print('Read the TFrecords')
+            transfer_model='Inception', min_accuracy=None, extract_SavedModel=False,
+            n_cores=8):
         
         if use_TPU:
             batch_size *= 8; # tpu needs batch_size * 8 to separe load on each core
@@ -339,37 +337,29 @@ class image_classifier():
             return feature, target
         
         def load_dataset(filenames):
-            # read from TFRecords. For optimal performance, use "interleave(tf.data.TFRecordDataset, ...)"
-            # to read from multiple TFRecord files at once and set the option experimental_deterministic = False
-            # to allow order-altering optimizations.
-        
-            # option_no_order = tf.data.Options()
-            # option_no_order.experimental_deterministic = False
-        
-            # dataset = tf.data.Dataset.list_files(GCS_PATTERN)
-            # dataset = dataset.with_options(option_no_order)
-            dataset = tf.data.TFRecordDataset(filenames, num_parallel_reads=16)
-            # dataset = dataset.interleave(tf.data.TFRecordDataset, cycle_length=16, num_parallel_calls=AUTO) # faster
-            dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO)
-            # dataset = dataset.apply(tf.data.experimental.map_and_batch(read_tfrecord, batch_size, drop_remainder=True, num_parallel_calls=AUTO))
+            buffer_size = 8 * 1024 * 1024
+            dataset = tf.data.TFRecordDataset(filenames, buffer_size=buffer_size)
             return dataset
       
-        def get_batched_dataset(filemames, shuffle=False):
-            dataset = load_dataset(filemames)
-            dataset = dataset.cache()
-            # dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(buffer_size=1024))
-            if shuffle:
-                dataset = dataset.shuffle(1000)
+        def get_batched_dataset(data_dir, is_training=False):
+            file_pattern = os.path.join(tfrecords_folder, "train*" if is_training else "val*")
+            print('pattern: '+file_pattern)
+            dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
+            dataset = dataset.apply(tf.data.experimental.parallel_interleave(
+                     load_dataset, cycle_length=n_cores, sloppy=True))
+            dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO).cache()
+            if is_training:
+                dataset = dataset.shuffle(steps_per_epoch*batch_size)
             dataset = dataset.repeat()
-            dataset = dataset.batch(batch_size, drop_remainder=True) # drop_remainder needed on TPU
-            dataset = dataset.prefetch(AUTO) # prefetch next batch while training (AUTO: autotune prefetch buffer size)
+            dataset = dataset.batch(batch_size, drop_remainder=True)
+            dataset = dataset.prefetch(AUTO) # prefetch next batch while training (-1: autotune prefetch buffer size)
             return dataset
       
         def get_training_dataset():
-            return get_batched_dataset(TRAIN_DATA, shuffle=True)
+            return get_batched_dataset(tfrecords_folder, is_training=True)
 
         def get_validation_dataset():
-            return get_batched_dataset(VAL_DATA)
+            return get_batched_dataset(tfrecords_folder)
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
@@ -414,7 +404,7 @@ class image_classifier():
         if use_TPU:
             tpu = tf.contrib.cluster_resolver.TPUClusterResolver() # TPU detection
             strategy = tf.contrib.tpu.TPUDistributionStrategy(tpu)
-            tpu_model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+            model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
             
         #if we want to weight the classes given the imbalanced number of images
         if include_class_weight:
@@ -430,7 +420,7 @@ class image_classifier():
         if use_TPU:
             # Little wrinkle: reading directly from dataset object not yet implemented
             # for Keras/TPU. Please use a function that returns a dataset.
-            history = tpu_model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+            history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset, validation_steps=validation_steps,
                             verbose=verbose, callbacks=callback, class_weight=class_weight)
         else:
@@ -445,29 +435,40 @@ class image_classifier():
             print('Begin fine-tuning')
             print('============')
             
+            # Add more epochs to train longer at lower lr
+            epochs *= 2
+            
             #declare the first layers as trainable
             for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
                 layer.trainable = False
             for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
                 layer.trainable = True
-                
-            model.compile(optimizer=Adam(lr=learning_rate*0.1),   
+            
+            print('Recompiling model')
+            if use_TPU:
+                 # Only way to update TPU optimizer with arguments is to use tf optimizer
+                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate*0.1)
+                optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+            else:
+                optimizer = Adam(lr=learning_rate*0.1)
+           
+            model.compile(optimizer=optimizer, 
                           loss=loss,
                           metrics=['categorical_accuracy'])
-            
             #Fit the model
             if use_TPU:
-                tpu_model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+                print('TPU fine fit')
                 # Little wrinkle: reading directly from dataset object not yet implemented
                 # for Keras/TPU. Please use a function that returns a dataset.
-                history = tpu_model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
+                history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset, validation_steps=validation_steps,
                             verbose=verbose, callbacks=callback, class_weight=class_weight)
             else:
+                print('CPU/GPU fine fit')
                 history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset(), validation_steps=validation_steps,
                             verbose=verbose, callbacks=callback, class_weight=class_weight)
-            
+                
         #Evaluate the model, just to be sure
         self.fitness = history.history['val_categorical_accuracy'][-1]
              
@@ -491,6 +492,7 @@ class image_classifier():
         
         else:
             self.model = model
+            K.clear_session()
             del history
             del model
             
