@@ -289,12 +289,15 @@ class image_classifier():
         print('Optimal fitness value of:', -float(self.search_result.fun))
     
     #we fit the model given the images in the training set
-    def fit(self,tfrecords_folder, learning_rate=1e-4, 
+    def fit(self,tfrecords_folder, learning_rate=1e-3, 
             epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning =False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
             transfer_model='Inception', min_accuracy=None, extract_SavedModel=False,
-            n_cores=8):
+            n_cores=8, epsilon=1e-08):
+        
+        # Useful to avoid clutter from old models / layers.
+        K.clear_session()
         
         if use_TPU:
             batch_size *= 8; # tpu needs batch_size * 8 to separe load on each core
@@ -332,6 +335,8 @@ class image_classifier():
             image = tf.image.decode_jpeg(example['image'],channels=3)
             image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
             image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
+            if use_TPU:
+                image = tf.cast(image, tf.bfloat16)
             feature = tf.reshape(image, [*target_size, 3])
             label = tf.cast(example['label'], tf.int32)  # byte string
             target = tf.one_hot(label, len(self.categories))
@@ -396,16 +401,18 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model
-        if use_TPU:
-            # Only way to update TPU optimizer with arguments is to use tf optimizer
-            optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-            optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
-        else:
-            optimizer = Adam(lr=learning_rate)
         loss = 'categorical_crossentropy'
-        model.compile(optimizer=optimizer,
-              loss=loss,
-              metrics=['categorical_accuracy'])
+        optimizer = Adam(lr=learning_rate, epsilon=epsilon)
+        if use_TPU:
+            with tf.contrib.tpu.bfloat16_scope():
+                model.compile(optimizer=optimizer,
+                              loss=loss,
+                              metrics=['categorical_accuracy'])
+        else:
+            model.compile(optimizer=optimizer,
+                          loss=loss,
+                          metrics=['categorical_accuracy'])
+        
         
         if use_TPU:
             tpu = tf.contrib.cluster_resolver.TPUClusterResolver() # TPU detection
@@ -451,16 +458,17 @@ class image_classifier():
                 layer.trainable = True
             
             print('Recompiling model')
+            optimizer = Adam(lr=learning_rate*0.1, epsilon=epsilon)
             if use_TPU:
-                # TPU works best with tf optimizer
-                optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate*0.1)
-                optimizer = tf.contrib.tpu.CrossShardOptimizer(optimizer)
+                with tf.contrib.tpu.bfloat16_scope():
+                    model.compile(optimizer=optimizer,
+                                  loss=loss,
+                                  metrics=['categorical_accuracy'])
             else:
-                optimizer = Adam(lr=learning_rate*0.1)
-           
-            model.compile(optimizer=optimizer, 
-                          loss=loss,
-                          metrics=['categorical_accuracy'])
+                model.compile(optimizer=optimizer, 
+                              loss=loss,
+                              metrics=['categorical_accuracy'])
+            
             #Fit the model
             if use_TPU:
                 print('TPU fine fit')
@@ -498,7 +506,6 @@ class image_classifier():
         
         else:
             self.model = model
-            K.clear_session()
             del history
             del model
             
