@@ -338,9 +338,9 @@ class image_classifier():
             if use_TPU:
                 image = tf.cast(image, tf.bfloat16)
             feature = tf.reshape(image, [*target_size, 3])
-            label = tf.cast(example['label'], tf.int32)  # byte string
-            target = tf.one_hot(label, len(self.categories))
-            return feature, target
+            label = tf.cast([example['label']], tf.int32)  # byte string
+            # target = tf.one_hot(label, len(self.categories))
+            return feature, label
         
         def load_dataset(filenames):
             buffer_size = 8 * 1024 * 1024
@@ -369,7 +369,7 @@ class image_classifier():
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
-            callback = EarlyStopping(monitor='categorical_accuracy', baseline=min_accuracy)
+            callback = EarlyStopping(monitor='sparse_categorical_accuracy', baseline=min_accuracy)
             callback = [callback]
         else:
             callback = None
@@ -401,17 +401,18 @@ class image_classifier():
             layer.trainable = False
             
         #Define the optimizer and the loss, and compile the model
-        loss = 'categorical_crossentropy'
+        loss = 'sparse_categorical_crossentropy'
+        metrics = ['sparse_categorical_accuracy']
         optimizer = Adam(lr=learning_rate, epsilon=epsilon)
         if use_TPU:
             with tf.contrib.tpu.bfloat16_scope():
                 model.compile(optimizer=optimizer,
                               loss=loss,
-                              metrics=['categorical_accuracy'])
+                              metrics=metrics)
         else:
             model.compile(optimizer=optimizer,
                           loss=loss,
-                          metrics=['categorical_accuracy'])
+                          metrics=metrics)
         
         
         if use_TPU:
@@ -463,11 +464,11 @@ class image_classifier():
                 with tf.contrib.tpu.bfloat16_scope():
                     model.compile(optimizer=optimizer,
                                   loss=loss,
-                                  metrics=['categorical_accuracy'])
+                                  metrics=metrics) 
             else:
                 model.compile(optimizer=optimizer, 
                               loss=loss,
-                              metrics=['categorical_accuracy'])
+                              metrics=metrics)
             
             #Fit the model
             if use_TPU:
@@ -484,7 +485,7 @@ class image_classifier():
                             verbose=verbose, callbacks=callback, class_weight=class_weight)
                 
         #Evaluate the model, just to be sure
-        self.fitness = history.history['val_categorical_accuracy'][-1]
+        self.fitness = history.history['val_sparse_categorical_accuracy'][-1]
              
         #Save the model
         if save_model:
