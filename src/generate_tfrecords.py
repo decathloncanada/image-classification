@@ -10,78 +10,96 @@ https://medium.com/@moritzkrger/speeding-up-keras-with-tfrecord-datasets-5464f98
 
 import matplotlib.image as mpimg
 import tensorflow as tf
+import math
+import numpy as np
 
 import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir)
 
+print("Tensorflow version " + tf.__version__)
+AUTO = tf.data.experimental.AUTOTUNE 
+
 class generate_tfrecords:
     
     def __init__(self):
         self._create_graph()
 
-    # Create graph to convert PNG image data to JPEG data
+    # Create graph to create tfrecords
     def _create_graph(self):
-        tf.reset_default_graph()
-        self.png_img_pl = tf.placeholder(tf.string)
-        png_enc = tf.image.decode_png(self.png_img_pl, channels = 3)
-        # Set how much quality of image you would like to retain while conversion
-        self.png_to_jpeg = tf.image.encode_jpeg(png_enc, format = 'rgb', quality = 100)
-
+        self.sess = tf.Session()
+        
     def _is_png_image(self, filename):
         ext = os.path.splitext(filename)[1].lower()
         return ext == '.png'
 
     # Run graph to convert PNG image data to JPEG data
     def _convert_png_to_jpeg(self, img):
-        sess = tf.get_default_session()
-        return sess.run(self.png_to_jpeg, feed_dict = {self.png_img_pl: img})
+         png_enc = tf.image.decode_png(img, channels = 3)
+         return tf.image.encode_jpeg(png_enc, format = 'rgb', quality = 100)
+        
 
-    def _convert_image(self, img_path, label, classes):
-        img_shape = mpimg.imread(img_path).shape
-        filename = os.path.basename(img_path).split('.')[0]
-
-        # Read image data in terms of bytes
-        with tf.gfile.FastGFile(img_path, 'rb') as fid:
-            image_data = fid.read()
-
-            # Encode PNG data to JPEG data
-            if self._is_png_image(img_path):
-                image_data = self._convert_png_to_jpeg(image_data)
-                
-#        one_hot_label = tf.tile(tf.expand_dims(label, axis=-1), [len(classes)])
-#        one_hot_label = tf.cast(tf.math.equal(one_hot_label, list(range(len(classes)))), tf.uint8)
+    def _to_tfrecord(self, img_bytes, label, height, width):
 
         example = tf.train.Example(features = tf.train.Features(feature = {
-            'filename': tf.train.Feature(bytes_list = tf.train.BytesList(value = [filename.encode('utf-8')])),
-            'rows': tf.train.Feature(int64_list = tf.train.Int64List(value = [img_shape[0]])),
-            'cols': tf.train.Feature(int64_list = tf.train.Int64List(value = [img_shape[1]])),
+            'size': tf.train.Feature(int64_list = tf.train.Int64List(value = [height, width])),
             'channels': tf.train.Feature(int64_list = tf.train.Int64List(value = [3])),
-            'image': tf.train.Feature(bytes_list = tf.train.BytesList(value = [image_data])),
-            'label': tf.train.Feature(int64_list = tf.train.Int64List(value = [label])),
-#            'one_hot_label': tf.train.Feature(bytes_list = tf.train.BytesList(value = [one_hot_label.numpy().tobytes()]))
+            'image': tf.train.Feature(bytes_list = tf.train.BytesList(value = [img_bytes])),
+            'label': tf.train.Feature(int64_list = tf.train.Int64List(value = [label]))
         }))
         return example
     
     #main method, to convert all images
     def convert_image_folder(self, img_folder=parentdir+'/data/image_dataset/train',
-                             tfrecord_file_name=parentdir+'/data/image_dataset/train.tfrecord'):
+                             gcs_ouput=parentdir+'/data/image_dataset/train',
+                             shards=16):
         # Get all file names of images present in folder
         classes = os.listdir(img_folder)
-        classes_paths = [os.path.abspath(os.path.join(img_folder, i)) for i in classes]
-
-        with tf.python_io.TFRecordWriter(tfrecord_file_name) as writer:
-            for i, j in enumerate(classes):
-                #for all the classes, get the list of pictures
-                img_paths = os.listdir(classes_paths[i])    
-                img_paths = [os.path.abspath(os.path.join(classes_paths[i], x)) for x in img_paths]
-                
-                for img_path in img_paths:
-                    #for all the images, get the tf record
-                    example = self._convert_image(img_path, i, classes)
-                    writer.write(example.SerializeToString())
-                    
+        img_pattern = os.path.join(img_folder, '*/*')
+        nb_images = len(tf.gfile.Glob(img_pattern))
+        shard_size = math.ceil(1.0 * nb_images / shards)
+        print("Pattern matches {} images which will be rewritten as {} .tfrec files containing {} images each.".format(nb_images, shards, shard_size))
+        
+        def decode_jpeg_and_label(filename):
+            image = tf.read_file(filename)
+            image = tf.image.decode_png(image, channels = 3)
+            # parse flower name from containing directory
+            label = tf.strings.split(tf.expand_dims(filename, axis=-1), sep='/')
+            label = label.values[-2]
+            return image, label
+        
+        def recompress_image(image, label):
+            height = tf.shape(image)[0]
+            width = tf.shape(image)[1]
+            # image = tf.cast(image, tf.uint8)
+            image = tf.image.encode_jpeg(image, format = 'rgb', quality = 100)
+            return image, label, height, width
+        
+        filenames = tf.data.Dataset.list_files(img_pattern) # This also shuffles the images
+        dataset = filenames.map(decode_jpeg_and_label, num_parallel_calls=AUTO)
+        dataset = dataset.map(recompress_image, num_parallel_calls=AUTO)
+        dataset = dataset.batch(shard_size) # sharding: there will be one "batch" of images per file
+        iterator = dataset.make_one_shot_iterator()
+        next_shard = iterator.get_next()
+        
+        print("Writing TFRecords")
+        for shard in range(shards):
+            image, label, height, width = self.sess.run(next_shard)
+            # batch size used as shard size here
+            shard_size = image.shape[0]
+            # good practice to have the number of records in the filename
+            filename = gcs_ouput + "{:02d}-{}.tfrec".format(shard, shard_size)
+  
+            with tf.python_io.TFRecordWriter(filename) as out_file:
+                for i in range(shard_size):
+                    example = self._to_tfrecord(image[i], # re-compressed image: already a byte string
+                                                np.argmax(np.array(classes)==label[i]),
+                                                height[i],
+                                                width[i])
+                    out_file.write(example.SerializeToString())
+                print("Wrote file {} containing {} records".format(filename, shard_size))
+    
 if __name__=='__main__':
     transformer = generate_tfrecords()
     transformer.convert_image_folder(img_folder=parentdir+'/data/image_dataset/val',
