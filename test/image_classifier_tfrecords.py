@@ -26,6 +26,7 @@ import numpy as np
 import os
 import pickle as pickle
 import random
+import math
 
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 from tensorflow.python.keras.applications.xception import Xception
@@ -293,7 +294,7 @@ class image_classifier():
             epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning =False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
-            transfer_model='Inception', min_accuracy=None, extract_SavedModel=False,
+            transfer_model='Inception_Resnet', min_accuracy=None, extract_SavedModel=False,
             n_cores=8, epsilon=1e-08):
         
         # Useful to avoid clutter from old models / layers.
@@ -304,10 +305,23 @@ class image_classifier():
             
         #We expect the classes to be the name of the folders in the training set
         print(TRAIN_DIR)
-        self.categories = os.listdir(TRAIN_DIR)
+        self.categories = sorted(os.listdir(TRAIN_DIR))
+        print(self.categories)
         
-        steps_per_epoch = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/train')]) / batch_size)
-        validation_steps = int(sum([len(files) for r, d, files in os.walk(parentdir + '/data/image_dataset/val')]) / batch_size)
+        nb_train_tfrecords = len(tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'train')))
+        print('nb_train_tfrecords = '+str(nb_train_tfrecords))
+        nb_val_tfrecords = len(tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'val')))
+        print('nb_val_tfrecords = '+str(nb_val_tfrecords))
+        nb_shards = nb_train_tfrecords + nb_val_tfrecords
+        print('nb_shards = '+str(nb_shards))
+        nb_images = len(tf.gfile.Glob(os.path.join(TRAIN_DIR, '*/*')))
+        print('nb_images = '+str(nb_images))
+        shard_size = math.ceil(1.0 * nb_images / nb_shards)
+        print('shard_size = '+str(shard_size))
+        steps_per_epoch = int(nb_train_tfrecords*shard_size / batch_size)
+        print('steps_per_epoch = '+str(steps_per_epoch))
+        validation_steps = int(nb_val_tfrecords*shard_size / batch_size)
+        print('validation_steps = '+str(validation_steps))
         
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
@@ -323,49 +337,48 @@ class image_classifier():
         def read_tfrecord(example):
 
             features = {
-            'filename': tf.FixedLenFeature((), tf.string),
-            'rows': tf.FixedLenFeature((), tf.int64),
-            'cols': tf.FixedLenFeature((), tf.int64),
-            'channels': tf.FixedLenFeature((), tf.int64),
             'image': tf.FixedLenFeature((), tf.string),
             'label': tf.FixedLenFeature((), tf.int64),
-#           'one_hot_label': tf.train.Feature(bytes_list = tf.train.BytesList(value = [one_hot_label.numpy().tobytes()]))
             }
             example = tf.parse_single_example(example, features)
             image = tf.image.decode_jpeg(example['image'],channels=3)
-            image = tf.cast(image, tf.float32) / 255.0  # convert image to floats in [0, 1] range
-            image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
             if use_TPU:
-                image = tf.cast(image, tf.bfloat16)
+                # image = tf.cast(image, tf.bfloat16)
+                image = tf.image.convert_image_dtype(image, dtype = tf.bfloat16)
+            else:
+                image = tf.image.convert_image_dtype(image, dtype = tf.float32)
             feature = tf.reshape(image, [*target_size, 3])
             label = tf.cast([example['label']], tf.int32)  # byte string
-            # target = tf.one_hot(label, len(self.categories))
             return feature, label
         
         def load_dataset(filenames):
-            buffer_size = 8 * 1024 * 1024
+            buffer_size = 8 * 1024 * 1024 # 8 MiB per file
             dataset = tf.data.TFRecordDataset(filenames, buffer_size=buffer_size)
             return dataset
-      
-        def get_batched_dataset(data_dir, is_training=False):
-            file_pattern = os.path.join(tfrecords_folder, "train*" if is_training else "val*")
-            print('pattern: '+file_pattern)
+
+        def get_training_dataset(tfrecords_folder=tfrecords_folder):
+            file_pattern = os.path.join(tfrecords_folder, "train/*")
+            dataset = tf.data.Dataset.list_files(file_pattern, shuffle=True)
+            dataset = dataset.apply(tf.data.experimental.parallel_interleave(
+                                    load_dataset, cycle_length=n_cores, sloppy=True))
+            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(    
+                                    buffer_size=steps_per_epoch*batch_size))
+            dataset = dataset.apply(tf.data.experimental.map_and_batch(
+                                    read_tfrecord, batch_size=batch_size, 
+                                    num_parallel_batches=n_cores, drop_remainder=True))
+            dataset = dataset.cache().prefetch(AUTO)
+            return dataset
+
+        def get_validation_dataset(tfrecords_folder=tfrecords_folder):
+            file_pattern = os.path.join(tfrecords_folder, "val/*")
             dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
             dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                     load_dataset, cycle_length=n_cores, sloppy=True))
-            dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO).cache()
-            if is_training:
-                dataset = dataset.shuffle(steps_per_epoch*batch_size)
-            dataset = dataset.repeat()
-            dataset = dataset.batch(batch_size, drop_remainder=True)
-            dataset = dataset.prefetch(AUTO) # prefetch next batch while training (-1: autotune prefetch buffer size)
+                                    load_dataset, cycle_length=n_cores, sloppy=False))
+            dataset = dataset.apply(tf.data.experimental.map_and_batch(
+                                    read_tfrecord, batch_size=batch_size, 
+                                    num_parallel_batches=n_cores, drop_remainder=True))
+            dataset = dataset.cache().repeat().prefetch(AUTO)
             return dataset
-      
-        def get_training_dataset():
-            return get_batched_dataset(tfrecords_folder, is_training=True)
-
-        def get_validation_dataset():
-            return get_batched_dataset(tfrecords_folder)
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:

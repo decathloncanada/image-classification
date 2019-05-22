@@ -9,8 +9,9 @@ split_train: function to build a validation set from a training set of images.
 @author: AI team
 """
 import numpy as np
+import tensorflow as tf
 from PIL import Image
-import os,sys,inspect
+import os,sys,inspect, math
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 
@@ -70,6 +71,29 @@ def split_train(path=parentdir+'/data/image_dataset', split=0.1):
         #Move a fraction of the images to the val directory
         for j in range(int(split*len(images))):
             os.rename(path + '/train/' + i + '/' + images[j], path + '/val/' + i + '/' + images[j])
+        
+        
+def split_train_tfrecords(path=parentdir+'/data/image_dataset', split=0.1):
+    """
+    path: path to the train tfrecords directory, which includes all training tfrecords
+    from a dataset. The function will generate, a val subdirectly, in which we move 
+    a portion of the training tfrecords.
+    
+    split: fraction of each category that we move to the validation (val) subdirectory
+    """
+    train_path = os.path.join(path,'train')
+    val_path = os.path.join(path,'val')
+    
+    #Loop through all the tfrecords in the train directory
+    tfrecords = tf.gfile.ListDirectory(train_path)
+    print(tfrecords)
+    shuffle(tfrecords)
+        
+    #Move a fraction of the images to the val directory
+    for i in range(math.ceil(split*len(tfrecords))):
+        
+        tf.gfile.Rename(os.path.join(train_path, tfrecords[i]), os.path.join(val_path, tfrecords[i]))
+            
 
 #function to add cutoff regularization to image classification...
 #...taken from https://github.com/yu4u/cutout-random-erasing/blob/master/random_eraser.py            
