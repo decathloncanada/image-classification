@@ -69,8 +69,8 @@ class generate_tfrecords:
             label = label.values[-2]
             return image, label
         
-        def resize_and_crop_image(image, label):
-            image = tf.image.resize_images(image, size=[*target_size], method=tf.image.ResizeMethod.BILINEAR)
+        def resize_image(image, label):
+            image = tf.image.resize_images(image, size=[*target_size])
             image = tf.reshape(image, [*target_size, 3])
             return image, label
         
@@ -82,7 +82,7 @@ class generate_tfrecords:
 
         filenames = tf.data.Dataset.list_files(img_pattern) # This also shuffles the images
         dataset = filenames.map(decode_jpeg_and_label, num_parallel_calls=AUTO)
-        dataset = dataset.map(resize_and_crop_image, num_parallel_calls=AUTO)
+        dataset = dataset.map(resize_image, num_parallel_calls=AUTO)
         dataset = dataset.map(recompress_image, num_parallel_calls=AUTO)
         dataset = dataset.batch(shard_size) # sharding: there will be one "batch" of images per file
         iterator = dataset.make_one_shot_iterator()

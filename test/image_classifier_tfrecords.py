@@ -218,7 +218,7 @@ class image_classifier():
 
         except:
             #fall back default values
-            default_parameters = [5, 1024, 1e-4, 0, True, 1, 'relu', True]
+            default_parameters = [5, 1024, 1e-3, 0, True, 1, 'relu', True]
         
         self.number_iterations = 0
     
@@ -293,7 +293,7 @@ class image_classifier():
     def fit(self,tfrecords_folder, learning_rate=1e-3, 
             epochs=5, activation='relu', dropout=0, hidden_size=1024, nb_layers=1, 
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
-            fine_tuning =False, NB_IV3_LAYERS_TO_FREEZE=279, use_TPU=False,
+            fine_tuning =False, layers_to_freeze_ratio=0.5, use_TPU=False,
             transfer_model='Inception_Resnet', min_accuracy=None, extract_SavedModel=False,
             n_cores=8, epsilon=1e-08):
         
@@ -306,28 +306,41 @@ class image_classifier():
         #We expect the classes to be the name of the folders in the training set
         print(TRAIN_DIR)
         self.categories = sorted(os.listdir(TRAIN_DIR))
+        print('Classes ({}) :'.format(len(self.categories)))
         print(self.categories)
         
-        nb_train_tfrecords = len(tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'train')))
-        print('nb_train_tfrecords = '+str(nb_train_tfrecords))
-        nb_val_tfrecords = len(tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'val')))
-        print('nb_val_tfrecords = '+str(nb_val_tfrecords))
-        nb_shards = nb_train_tfrecords + nb_val_tfrecords
-        print('nb_shards = '+str(nb_shards))
-        nb_images = len(tf.gfile.Glob(os.path.join(TRAIN_DIR, '*/*')))
-        print('nb_images = '+str(nb_images))
-        shard_size = math.ceil(1.0 * nb_images / nb_shards)
-        print('shard_size = '+str(shard_size))
-        steps_per_epoch = int(nb_train_tfrecords*shard_size / batch_size)
-        print('steps_per_epoch = '+str(steps_per_epoch))
-        validation_steps = int(nb_val_tfrecords*shard_size / batch_size)
-        print('validation_steps = '+str(validation_steps))
+        train_tfrecords = tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'train'))
+        print('Training tfrecords = {}'.format(len(train_tfrecords)))
+        val_tfrecords = tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'val'))
+        print('Val tfrecords = {}'.format(len(val_tfrecords)))
+        nb_train_images = 0
+        for train_tfrecord in train_tfrecords:
+            nb_train_images += int(train_tfrecord.split('.')[0].split('-')[1])
+        print('Training images = '+str(nb_train_images))
+        nb_val_images = 0
+        for val_tfrecord in val_tfrecords:
+            nb_val_images += int(val_tfrecord.split('.')[0].split('-')[1])
+        print('Val images = '+str(nb_val_images))
+        
+        training_shard_size = math.ceil(nb_train_images/len(train_tfrecords))
+        print('Training shard size = {}'.format(training_shard_size))
+        
+        val_shard_size = math.ceil(nb_val_images/len(val_tfrecords))
+        print('Val shard size = {}'.format(val_shard_size))
+        
+        print('Training batch size = '+str(batch_size))
+        steps_per_epoch = int(nb_train_images / batch_size)
+        print('Training steps per epochs = '+str(steps_per_epoch))
+        
+        # val_batch_size = nb_val_images
+        print('Val batch size = '+str(batch_size))
+        validation_steps = int(nb_val_images / batch_size)
+        print('Val steps per epochs = '+str(validation_steps))
         
         if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
             target_size = (299, 299)
         else:
             target_size = (224, 224)
-            
         
             
         """
@@ -343,12 +356,11 @@ class image_classifier():
             example = tf.parse_single_example(example, features)
             image = tf.image.decode_jpeg(example['image'],channels=3)
             if use_TPU:
-                # image = tf.cast(image, tf.bfloat16)
                 image = tf.image.convert_image_dtype(image, dtype = tf.bfloat16)
             else:
                 image = tf.image.convert_image_dtype(image, dtype = tf.float32)
             feature = tf.reshape(image, [*target_size, 3])
-            label = tf.cast([example['label']], tf.int32)  # byte string
+            label = tf.cast([example['label']], tf.int32)
             return feature, label
         
         def load_dataset(filenames):
@@ -360,12 +372,12 @@ class image_classifier():
             file_pattern = os.path.join(tfrecords_folder, "train/*")
             dataset = tf.data.Dataset.list_files(file_pattern, shuffle=True)
             dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                    load_dataset, cycle_length=n_cores, sloppy=True))
-            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(    
-                                    buffer_size=steps_per_epoch*batch_size))
-            dataset = dataset.apply(tf.data.experimental.map_and_batch(
+                                    load_dataset, cycle_length=n_cores, sloppy=True))  # TODO : try cycle_length = number of shards
+            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(            
+                                    buffer_size=nb_train_images))
+            dataset = dataset.apply(tf.data.experimental.map_and_batch( 
                                     read_tfrecord, batch_size=batch_size, 
-                                    num_parallel_batches=n_cores, drop_remainder=True))
+                                    num_parallel_batches=n_cores, drop_remainder=True)) # TODO :try num_parallel_calls = AUTO;n_cores 
             dataset = dataset.cache().prefetch(AUTO)
             return dataset
 
@@ -397,6 +409,8 @@ class image_classifier():
         else:
             base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299,299,3))
         
+        nb_layers_base_model = len(base_model.layers)
+        print('Base model layers = '+str(nb_layers_base_model))
         #Add the classification layers using Keras functional API
         x = base_model.output
         x = GlobalAveragePooling2D()(x)
@@ -465,10 +479,12 @@ class image_classifier():
             # Add more epochs to train longer at lower lr
             epochs *= 2
             
+            nb_layers_to_freeze = math.ceil(nb_layers_base_model*layers_to_freeze_ratio)
+            print('Freezing {} layers of {} layers from the base model'.format(nb_layers_to_freeze, nb_layers_base_model))
             #declare the first layers as trainable
-            for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
+            for layer in model.layers[:nb_layers_to_freeze]:
                 layer.trainable = False
-            for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
+            for layer in model.layers[nb_layers_to_freeze:]:
                 layer.trainable = True
             
             print('Recompiling model')
