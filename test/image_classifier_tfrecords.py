@@ -295,7 +295,7 @@ class image_classifier():
             include_class_weight=False, batch_size=20, save_model=False, verbose=True,
             fine_tuning =False, layers_to_freeze_ratio=0.5, use_TPU=False,
             transfer_model='Inception_Resnet', min_accuracy=None, extract_SavedModel=False,
-            n_cores=8, epsilon=1e-08):
+            nb_cpu_cores=8, epsilon=1e-08, callbacks=None):
         
         # Useful to avoid clutter from old models / layers.
         K.clear_session()
@@ -310,9 +310,11 @@ class image_classifier():
         print(self.categories)
         
         train_tfrecords = tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'train'))
-        print('Training tfrecords = {}'.format(len(train_tfrecords)))
+        nb_train_shards = len(train_tfrecords)
+        print('Training tfrecords = {}'.format(nb_train_shards))
         val_tfrecords = tf.gfile.ListDirectory(os.path.join(tfrecords_folder, 'val'))
-        print('Val tfrecords = {}'.format(len(val_tfrecords)))
+        nb_val_shards = len(val_tfrecords)
+        print('Val tfrecords = {}'.format(nb_val_shards))
         nb_train_images = 0
         for train_tfrecord in train_tfrecords:
             nb_train_images += int(train_tfrecord.split('.')[0].split('-')[1])
@@ -322,10 +324,10 @@ class image_classifier():
             nb_val_images += int(val_tfrecord.split('.')[0].split('-')[1])
         print('Val images = '+str(nb_val_images))
         
-        training_shard_size = math.ceil(nb_train_images/len(train_tfrecords))
+        training_shard_size = math.ceil(nb_train_images/nb_train_shards)
         print('Training shard size = {}'.format(training_shard_size))
         
-        val_shard_size = math.ceil(nb_val_images/len(val_tfrecords))
+        val_shard_size = math.ceil(nb_val_images/nb_val_shards)
         print('Val shard size = {}'.format(val_shard_size))
         
         print('Training batch size = '+str(batch_size))
@@ -372,32 +374,36 @@ class image_classifier():
             file_pattern = os.path.join(tfrecords_folder, "train/*")
             dataset = tf.data.Dataset.list_files(file_pattern, shuffle=True)
             dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                    load_dataset, cycle_length=n_cores, sloppy=True))  # TODO : try cycle_length = number of shards
+                                    load_dataset, cycle_length=nb_train_shards,
+                                    sloppy=True))
             dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(            
                                     buffer_size=nb_train_images))
             dataset = dataset.apply(tf.data.experimental.map_and_batch( 
                                     read_tfrecord, batch_size=batch_size, 
-                                    num_parallel_batches=n_cores, drop_remainder=True)) # TODO :try num_parallel_calls = AUTO;n_cores 
-            dataset = dataset.cache().prefetch(AUTO)
+                                    num_parallel_calls=AUTO, drop_remainder=True))
+            dataset = dataset.prefetch(AUTO)
             return dataset
 
         def get_validation_dataset(tfrecords_folder=tfrecords_folder):
             file_pattern = os.path.join(tfrecords_folder, "val/*")
             dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
             dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                    load_dataset, cycle_length=n_cores, sloppy=False))
+                                    load_dataset, cycle_length=nb_val_shards, 
+                                    sloppy=False))
+            dataset = dataset.repeat()
             dataset = dataset.apply(tf.data.experimental.map_and_batch(
                                     read_tfrecord, batch_size=batch_size, 
-                                    num_parallel_batches=n_cores, drop_remainder=True))
-            dataset = dataset.cache().repeat().prefetch(AUTO)
+                                    num_parallel_calls=AUTO, drop_remainder=True))
+            dataset = dataset.prefetch(AUTO)
             return dataset
              
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
             callback = EarlyStopping(monitor='sparse_categorical_accuracy', baseline=min_accuracy)
-            callback = [callback]
-        else:
-            callback = None
+            if callbacks is None:
+                callbacks = [callback]
+            else:
+                callbacks.append(callback)
         
         #load the pretrained model, without the classification (top) layers
         if transfer_model=='Xception':
@@ -420,7 +426,12 @@ class image_classifier():
                 x = Dropout(rate=dropout)(x)
             
         predictions = Dense(len(self.categories), activation='softmax')(x) #Output layer
-        model = Model(inputs=base_model.input, outputs=predictions)
+        
+        if use_TPU:
+            with tf.contrib.tpu.bfloat16_scope():
+                model = Model(inputs=base_model.input, outputs=predictions)
+        else:
+            model = Model(inputs=base_model.input, outputs=predictions)
         
         #Set only the top layers as trainable (if we want to do fine-tuning,
         #we can train the base layers as a second step)
@@ -431,16 +442,7 @@ class image_classifier():
         loss = 'sparse_categorical_crossentropy'
         metrics = ['sparse_categorical_accuracy']
         optimizer = Adam(lr=learning_rate, epsilon=epsilon)
-        if use_TPU:
-            with tf.contrib.tpu.bfloat16_scope():
-                model.compile(optimizer=optimizer,
-                              loss=loss,
-                              metrics=metrics)
-        else:
-            model.compile(optimizer=optimizer,
-                          loss=loss,
-                          metrics=metrics)
-        
+        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
         
         if use_TPU:
             tpu = tf.contrib.cluster_resolver.TPUClusterResolver() # TPU detection
@@ -463,11 +465,11 @@ class image_classifier():
             # for Keras/TPU. Please use a function that returns a dataset.
             history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset, validation_steps=validation_steps,
-                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+                            verbose=verbose, callbacks=callbacks, class_weight=class_weight)
         else:
             history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+                            verbose=verbose, callbacks=callbacks, class_weight=class_weight)
         
         
         #Fine-tune the model, if we wish so
@@ -489,15 +491,7 @@ class image_classifier():
             
             print('Recompiling model')
             optimizer = Adam(lr=learning_rate*0.1, epsilon=epsilon)
-            if use_TPU:
-                with tf.contrib.tpu.bfloat16_scope():
-                    model.compile(optimizer=optimizer,
-                                  loss=loss,
-                                  metrics=metrics) 
-            else:
-                model.compile(optimizer=optimizer, 
-                              loss=loss,
-                              metrics=metrics)
+            model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
             
             #Fit the model
             if use_TPU:
@@ -506,12 +500,12 @@ class image_classifier():
                 # for Keras/TPU. Please use a function that returns a dataset.
                 history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset, validation_steps=validation_steps,
-                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+                            verbose=verbose, callbacks=callbacks, class_weight=class_weight)
             else:
                 print('CPU/GPU fine fit')
                 history = model.fit(get_training_dataset(), steps_per_epoch=steps_per_epoch, epochs=epochs,
                             validation_data=get_validation_dataset(), validation_steps=validation_steps,
-                            verbose=verbose, callbacks=callback, class_weight=class_weight)
+                            verbose=verbose, callbacks=callbacks, class_weight=class_weight)
                 
         #Evaluate the model, just to be sure
         self.fitness = history.history['val_sparse_categorical_accuracy'][-1]
