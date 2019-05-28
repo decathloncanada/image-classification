@@ -369,34 +369,30 @@ class image_classifier():
             buffer_size = 8 * 1024 * 1024 # 8 MiB per file
             dataset = tf.data.TFRecordDataset(filenames, buffer_size=buffer_size)
             return dataset
-
-        def get_training_dataset(tfrecords_folder=tfrecords_folder):
-            file_pattern = os.path.join(tfrecords_folder, "train/*")
-            dataset = tf.data.Dataset.list_files(file_pattern, shuffle=True)
+        
+        def get_batched_dataset(tfrecords_folder, is_training, nb_readers):
+            file_pattern = os.path.join(tfrecords_folder, "train/*" if is_training else "val/*")
+            dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
             dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                    load_dataset, cycle_length=nb_train_shards,
-                                    sloppy=True))
-            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(            
+                                    load_dataset, cycle_length=nb_readers,
+                                    sloppy=is_training))
+            if is_training:
+                dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(            
                                     buffer_size=nb_train_images))
+            else:
+                dataset = dataset.repeat()
             dataset = dataset.apply(tf.data.experimental.map_and_batch( 
                                     read_tfrecord, batch_size=batch_size, 
                                     num_parallel_calls=AUTO, drop_remainder=True))
             dataset = dataset.prefetch(AUTO)
             return dataset
+        
+        def get_training_dataset():
+            return get_batched_dataset(tfrecords_folder, True, nb_train_shards)
 
-        def get_validation_dataset(tfrecords_folder=tfrecords_folder):
-            file_pattern = os.path.join(tfrecords_folder, "val/*")
-            dataset = tf.data.Dataset.list_files(file_pattern, shuffle=False)
-            dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                    load_dataset, cycle_length=nb_val_shards, 
-                                    sloppy=False))
-            dataset = dataset.repeat()
-            dataset = dataset.apply(tf.data.experimental.map_and_batch(
-                                    read_tfrecord, batch_size=batch_size, 
-                                    num_parallel_calls=AUTO, drop_remainder=True))
-            dataset = dataset.prefetch(AUTO)
-            return dataset
-             
+        def get_validation_dataset():
+            return get_batched_dataset(tfrecords_folder, False, nb_val_shards)
+        
         #if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
             callback = EarlyStopping(monitor='sparse_categorical_accuracy', baseline=min_accuracy)
