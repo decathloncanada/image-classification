@@ -166,13 +166,13 @@ class image_classifier():
         
     
     #optimize the hyperparameters of the model        
-    def _hyperparameter_optimization(self, tfrecords_folder, num_iterations=30, save_results=True,
+    def _hyperparameter_optimization(self, tfrecords_folder, num_iterations=20, save_results=True,
                                      display_plot=False, batch_size=20, n_random_starts=10,
                                      use_TPU=False, transfer_model='Inception', cutoff_regularization=False,
                                      min_accuracy=None):
         """
         min_accuracy: minimum value of categorical accuracy we want after 1 iteration
-        num_iterations: number of hyperparameter combinations we try
+        num_iterations: number of hyperparameter combinations we try (aim for a 1:1 to 2:1 ration num_iterations/n_random_starts)   
         n_random_starts: number of random combinations of hyperparameters first tried
         """
         
@@ -190,7 +190,7 @@ class image_classifier():
         from skopt.utils import use_named_args
                 
         #declare the hyperparameters search space
-        dim_epochs = Integer(low=1, high=10, name='epochs')
+        dim_epochs = Integer(low=1, high=20, name='epochs')
         dim_hidden_size = Integer(low=6, high=2048, name='hidden_size')   
         dim_learning_rate = Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
@@ -413,6 +413,7 @@ class image_classifier():
         
         nb_layers_base_model = len(base_model.layers)
         print('Base model layers = '+str(nb_layers_base_model))
+        
         #Add the classification layers using Keras functional API
         x = base_model.output
         x = GlobalAveragePooling2D()(x)
