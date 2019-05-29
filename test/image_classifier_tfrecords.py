@@ -199,6 +199,11 @@ class image_classifier():
         dim_nb_layers = Integer(low=1, high=3, name='nb_layers')   
         dim_activation = Categorical(categories=['relu', 'tanh'], name='activation')
         dim_include_class_weight = Categorical(categories=[True, False], name='include_class_weight')
+        
+        # TODO maybe hyperparameters to add :
+        # epsilon
+        # decay rate
+        # freeze ratio
 
         dimensions = [dim_epochs,
                       dim_hidden_size,
@@ -435,29 +440,34 @@ class image_classifier():
         for layer in base_model.layers:
             layer.trainable = False
             
+        #if we want to weight the classes given the imbalanced number of images
+        if include_class_weight:
+            cls_train = []
+            from sklearn.utils.class_weight import compute_class_weight
+            for dir in os.listdir(TRAIN_DIR):
+                for file in os.listdir(os.path.join(TRAIN_DIR, dir)):
+                    cls_train.append(dir)            
+            print('Total labels ({}) :'.format(len(cls_train)))
+            print('Unique labels ({}) :'.format(len(np.unique(cls_train))))
+            class_weight = compute_class_weight(class_weight='balanced',
+                                    classes=sorted(np.unique(cls_train)),
+                                    y=sorted(cls_train))
+            print('Classes weight :')
+            print(class_weight)
+        else:
+            class_weight = None
+            
         #Define the optimizer and the loss, and compile the model
         loss = 'sparse_categorical_crossentropy'
         metrics = ['sparse_categorical_accuracy']
         optimizer = Adam(lr=learning_rate, epsilon=epsilon)
         model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-        
+
+        #Fit the model
         if use_TPU:
             tpu = tf.contrib.cluster_resolver.TPUClusterResolver() # TPU detection
             strategy = tf.contrib.tpu.TPUDistributionStrategy(tpu)
             model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
-            
-        #if we want to weight the classes given the imbalanced number of images
-        if include_class_weight:
-            from sklearn.utils.class_weight import compute_class_weight
-            cls_train = self.categories
-            class_weight = compute_class_weight(class_weight='balanced',
-                                    classes=np.unique(cls_train),
-                                    y=cls_train)
-        else:
-            class_weight = None
-       
-        #Fit the model
-        if use_TPU:
             # Little wrinkle: reading directly from dataset object not yet implemented
             # for Keras/TPU. Please use a function that returns a dataset.
             history = model.fit(get_training_dataset, steps_per_epoch=steps_per_epoch, epochs=epochs,
