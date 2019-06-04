@@ -116,7 +116,7 @@ class generate_tfrecords:
             }
             example = tf.parse_single_example(example, features)
             image = tf.image.decode_jpeg(example['image'],channels=3)
-            image = tf.image.convert_image_dtype(image, dtype = tf.float32, saturate=True)
+            image = tf.image.convert_image_dtype(image, dtype = tf.float32)
             feature = tf.reshape(image, [*target_size, 3])
             label = tf.cast([example['label']], tf.int32)  # byte string
             return feature, label
