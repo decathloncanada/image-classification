@@ -48,6 +48,7 @@ class image_classifier():
         self.parent_dir = os.path.dirname(self.current_dir)
         self.train_dir = os.path.join(self.parent_dir, 'data/image_dataset/train')
         self.val_dir = os.path.join(self.parent_dir, 'data/image_dataset/val')
+        self.test_dir = os.path.join(self.parent_dir, 'data/image_dataset/test')
         # We expect the classes to be the name of the folders in the training set
         self.categories = sorted(os.listdir(self.train_dir))
         self.tfrecords_folder = tfrecords_folder
@@ -200,63 +201,72 @@ class image_classifier():
         data=[trace]
         py.iplot(data, filename='labelled-heatmap') 
         
+    # function to plot images...
+    # ...inspired by https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/10_Fine-Tuning.ipynb
+    def plot_images(self, images, cls_true, cls_pred=None, smooth=True, num_images=9):
+        assert len(images) == len(cls_true)
+        
+        # Create figure with sub-plots.
+        if math.sqrt(num_images).is_integer():
+            nrows = ncols = int(math.sqrt(num_images))
+        else:
+            for i in reversed(range(math.ceil(math.sqrt(num_images)))):
+                if not num_images % i:
+                    nrows = int(num_images/i)
+                    ncols = int(i)
+                    break
+        fig, axes = plt.subplots(nrows, ncols)
+    
+        # Adjust vertical spacing.
+        if cls_pred is None:
+            hspace = 0.3
+        else:
+            hspace = 0.6
+        fig.subplots_adjust(hspace=hspace, wspace=0.3)
+    
+        # Interpolation type.
+        if smooth:
+            interpolation = 'spline16'
+        else:
+            interpolation = 'nearest'
+    
+        for i, ax in enumerate(axes.flat):
+            # There may be less than 9 images, ensure it doesn't crash.
+            if i < len(images):
+                # Plot image.
+                ax.imshow(images[i],
+                          interpolation=interpolation)
+    
+                # Name of the true class.
+                cls_true_name = self.categories[
+                    cls_true[i]]
+    
+                # Show true and predicted classes.
+                if cls_pred is None:
+                    xlabel = "True: {0}".format(cls_true_name)
+                else:
+                    # Name of the predicted class.
+                    cls_pred_name = self.categories[
+                        cls_pred[i]]
+    
+                    xlabel = "True: {0}\nPred: {1}".format(
+                        cls_true_name, cls_pred_name)
+    
+                # Show the classes as the label on the x-axis.
+                ax.set_xlabel(xlabel)
+    
+            # Remove ticks from the plot.
+            ax.set_xticks([])
+            ax.set_yticks([])
+    
+        # Ensure the plot is shown correctly with multiple plots
+        # in a single Notebook cell.
+        plt.tight_layout()
+        plt.show()
+    
     # function to plot error images
     def plot_errors(self):
         
-        # function to plot images...
-        # ...inspired by https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/10_Fine-Tuning.ipynb
-        def plot_images(images, cls_true, cls_pred=None, smooth=True):
-            assert len(images) == len(cls_true)
-
-            # Create figure with sub-plots.
-            fig, axes = plt.subplots(3, 3)
-
-            # Adjust vertical spacing.
-            if cls_pred is None:
-                hspace = 0.3
-            else:
-                hspace = 0.6
-            fig.subplots_adjust(hspace=hspace, wspace=0.3)
-
-            # Interpolation type.
-            if smooth:
-                interpolation = 'spline16'
-            else:
-                interpolation = 'nearest'
-
-            for i, ax in enumerate(axes.flat):
-                # There may be less than 9 images, ensure it doesn't crash.
-                if i < len(images):
-                    # Plot image.
-                    ax.imshow(images[i],
-                              interpolation=interpolation)
-
-                    # Name of the true class.
-                    cls_true_name = self.categories[
-                        cls_true[i]]
-
-                    # Show true and predicted classes.
-                    if cls_pred is None:
-                        xlabel = "True: {0}".format(cls_true_name)
-                    else:
-                        # Name of the predicted class.
-                        cls_pred_name = self.categories[
-                            cls_pred[i]]
-
-                        xlabel = "True: {0}\nPred: {1}".format(
-                            cls_true_name, cls_pred_name)
-
-                    # Show the classes as the label on the x-axis.
-                    ax.set_xlabel(xlabel)
-
-                # Remove ticks from the plot.
-                ax.set_xticks([])
-                ax.set_yticks([])
-
-            # Ensure the plot is shown correctly with multiple plots
-            # in a single Notebook cell.
-            plt.show()
-
         # Predict the classes for the images in the validation set
         cls_pred = self.model.predict(self.get_validation_dataset(), steps=self.validation_steps)
         cls_pred = np.argmax(cls_pred, axis=1)
@@ -302,12 +312,33 @@ class image_classifier():
         
         # Plot the 9 images we have loaded and their corresponding classes.
         # We have only loaded 9 images so there is no need to slice those again.
-        plot_images(images=images,
+        self.plot_images(images=images,
                     cls_true=[ cls_true[i] for i in random_errors],
                     cls_pred=[ cls_pred[i] for i in random_errors])
-
+        
+    def classify(self):
+        test_datagen = ImageDataGenerator(rescale=1. / 255)
+        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
+                                                       target_size=self.target_size,
+                                                       shuffle=False,
+                                                       interpolation='bilinear',
+                                                       color_mode='rgb',
+                                                       class_mode=None,
+                                                       batch_size=1)
+        images = []
+        for _ in range(len(test_generator)):
+            images.append(next(test_generator)) 
+        images = np.reshape(np.asarray(images), [-1, *self.target_size, 3])
+        print('Test images loaded')
+            
+        cls_pred =  self.model.predict_on_batch(images)
+        cls_pred = np.argmax(cls_pred, axis=1)
+        K.clear_session()
+        print('Test labels loaded')
+        
+        self.plot_images(images=images, cls_true=cls_pred, num_images=len(images))
+            
     # optimize the hyperparameters of the model
-
     def hyperparameter_optimization(self, num_iterations=20, save_results=True,
                                      display_plot=False, n_random_starts=10,
                                      cutoff_regularization=False, min_accuracy=None):
