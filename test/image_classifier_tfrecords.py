@@ -86,7 +86,10 @@ class image_classifier():
         for val_tfrecord in val_tfrecords:
             nb_val_images += int(val_tfrecord.split('.')[0].split('-')[1])
         print('Val images = '+str(nb_val_images))
-
+        
+        self.nb_test_images = len(tf.gfile.Glob(os.path.join(self.test_dir, '*/*')))
+        print('Test images = {}'.format(self.nb_test_images))
+        
         training_shard_size = math.ceil(self.nb_train_images/self.nb_train_shards)
         print('Training shard size = {}'.format(training_shard_size))
 
@@ -324,7 +327,7 @@ class image_classifier():
                                                        interpolation='bilinear',
                                                        color_mode='rgb',
                                                        class_mode=None,
-                                                       batch_size=1)
+                                                       batch_size=self.nb_test_images)
         images = []
         for _ in range(len(test_generator)):
             images.append(next(test_generator)) 
@@ -608,19 +611,18 @@ class image_classifier():
             del model
 
     # TODO evaluation of the accuracy of classification on the test set
-    def evaluate(self, path, transfer_model='Inception'):
-        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
-            target_size = (299, 299)
-        else:
-            target_size = (224, 224)
+    def evaluate(self):
+        test_datagen = ImageDataGenerator(rescale=1. / 255)
+        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
+                                                       target_size=self.target_size,
+                                                       shuffle=False,
+                                                       interpolation='bilinear',
+                                                       color_mode='rgb',
+                                                       class_mode='sparse',
+                                                       batch_size=self.nb_test_images)
 
-        generator_test = ImageDataGenerator().flow_from_directory(directory=path,
-                                                                  target_size=target_size,
-                                                                  shuffle=False)
-
-        #results = model.predict_generator(generator=generator_test)
         self.test_results = self.model.evaluate_generator(
-            generator=generator_test)
+                generator=test_generator)
         print('Accuracy of', self.test_results[1]*100, '%')
 
 
