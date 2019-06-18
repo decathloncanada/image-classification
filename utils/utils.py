@@ -10,6 +10,8 @@ split_train: function to build a validation set from a training set of images.
 """
 import numpy as np
 import tensorflow as tf
+import PIL
+import shutil
 from PIL import Image
 import os,sys,inspect, math
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -18,7 +20,7 @@ parentdir = os.path.dirname(currentdir)
 from random import shuffle
 
 #function to verify images and convert them to RGB format
-def check_RGB(path=parentdir+'/data/image_dataset/train/'):
+def check_RGB(path=parentdir+'/data/image_dataset/train/', target_size=None):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -36,7 +38,10 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
         for img in imgs_paths:
             #try to open it
             try:
-                jpg = Image.open(img).convert('RGB')
+                if target_size is not None:
+                    jpg = Image.open(img).resize(target_size, PIL.Image.BILINEAR).convert('RGB')
+                else:
+                    jpg = Image.open(img).convert('RGB')
                 jpg.save(str(img))
             except:
                 #delete the file
@@ -46,8 +51,7 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
             if counter % 1000 == 1:
                 print('Verified', counter, 'images')
                 
-
-def split_train(path=parentdir+'/data/image_dataset', split=0.1):
+def split_train(path=parentdir+'/data/image_dataset', split=0.1, with_test=False):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -59,18 +63,30 @@ def split_train(path=parentdir+'/data/image_dataset', split=0.1):
     #Create a val subdirectory
     os.mkdir(path + '/val')
     
+    #Create a test subdirectory
+    os.mkdir(path + '/test')
+    
     #Loop through all the categories in the train directory
     for i in os.listdir(path + '/train'):
+        
         #Create the folder in the val subdirectory
         os.mkdir(path + '/val/' + i)
+        
+        #Create the folder in the val subdirectory
+        os.mkdir(path + '/test/' + i)
         
         #extract and shuffle all the images
         images = os.listdir(path + '/train/' + i)
         shuffle(images)
         
-        #Move a fraction of the images to the val directory
+        # Move a fraction of the images to the val directory
         for j in range(int(split*len(images))):
             os.rename(path + '/train/' + i + '/' + images[j], path + '/val/' + i + '/' + images[j])
+            
+        # Move one of the images to the test directory
+        if with_test:
+            index = int(split*len(images)) + 1
+            os.rename(path + '/train/' + i + '/' + images[index], path + '/test/' + i + '/' + images[index])
         
         
 def split_train_tfrecords(path=parentdir+'/data/image_dataset', split=0.1):
@@ -126,8 +142,6 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=1
         return input_img
 
     return eraser
-        
-        
     
         
     

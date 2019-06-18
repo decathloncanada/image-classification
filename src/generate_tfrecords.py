@@ -103,43 +103,6 @@ class generate_tfrecords:
                     out_file.write(example.SerializeToString())
                 print("Wrote file {} containing {} records".format(filename, shard_size))
             
-    def validate_tfrecord(self, img_folder=parentdir+'/data/image_dataset/train',
-                             gcs_ouput=parentdir+'/data/image_dataset/train',
-                             shards=16):
-
-                        
-        def read_tfrecord(example):
-            target_size = (299, 299)
-            features = {
-            'image': tf.FixedLenFeature((), tf.string),
-            'label': tf.FixedLenFeature((), tf.int64),
-            }
-            example = tf.parse_single_example(example, features)
-            image = tf.image.decode_jpeg(example['image'],channels=3)
-            image = tf.image.convert_image_dtype(image, dtype = tf.float32)
-            feature = tf.reshape(image, [*target_size, 3])
-            label = tf.cast([example['label']], tf.int32)  # byte string
-            return feature, label
-                
-        # read from TFRecords. For optimal performance, use "interleave(tf.data.TFRecordDataset, ...)"
-        # to read from multiple TFRecord files at once and set the option experimental_deterministic = False
-        # to allow order-altering optimizations.
-        
-        option_no_order = tf.data.Options()
-        option_no_order.experimental_deterministic = False
-        
-        dataset4 = tf.data.Dataset.list_files(gcs_ouput + "/*.tfrec")
-        dataset4 = dataset4.with_options(option_no_order)
-        #dataset4 = tf.data.TFRecordDataset(filenames, num_parallel_reads=16)
-        dataset4 = dataset4.interleave(tf.data.TFRecordDataset, cycle_length=16, num_parallel_calls=AUTO)
-        dataset4 = dataset4.map(read_tfrecord, num_parallel_calls=AUTO)
-        iterator = dataset4.make_one_shot_iterator()
-        next_shard = iterator.get_next()
-        
-        session = tf.Session()
-        for i in range(300):
-            feature, label = session.run(next_shard)
-            print("Image shape {}, class={}".format(feature.shape, label))
             
 if __name__=='__main__':
     transformer = generate_tfrecords()
