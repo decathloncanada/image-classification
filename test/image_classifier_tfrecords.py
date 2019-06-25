@@ -19,8 +19,13 @@ import random
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import dill
 import tensorflow as tf
+import skopt
+import dill
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
 from efficientnet import EfficientNetB0, EfficientNetB3
 AUTO = tf.data.experimental.AUTOTUNE
 # Does the TPU support eager mode?
@@ -28,11 +33,50 @@ AUTO = tf.data.experimental.AUTOTUNE
 # https://cloud.google.com/tpu/docs/faq
 # tf.enable_eager_execution()
 
+class Swish(tf.keras.layers.Activation):
+    
+    def __init__(self, activation, **kwargs):
+        super(Swish, self).__init__(activation, **kwargs)
+        self.__name__ = 'swish'
+        
+class CheckpointDownloader(object):
+    """
+    Download current state after each iteration to Google Drive.
+    Example usage:
+        from pydrive.auth import GoogleAuth
+        from pydrive.drive import GoogleDrive
+        from google.colab import auth
+        from oauth2client.client import GoogleCredentials
+        checkpoint_callback = CheckpointDownloader("./result.pkl")
+        skopt.gp_minimize(obj_fun, dims, callback=[checkpoint_callback])
+    Parameters
+    ----------
+    * `checkpoint_path`: location where checkpoint are saved to;
+    """
+    def __init__(self, checkpoint_path):
+        self.checkpoint_path = checkpoint_path
 
-class image_classifier():
+    def __call__(self, res):
+        """
+        Parameters
+        ----------
+        * `res` [`OptimizeResult`, scipy object]:
+            The optimization as a OptimizeResult object.
+        """
+        if os.path.exists(self.checkpoint_path):
+            print('Uploading checkpoint ' + self.checkpoint_path + ' to Google Drive')
+            auth.authenticate_user()
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            drive = GoogleDrive(gauth)
+            file = drive.CreateFile({'title': 'checkpoint.pkl'})
+            file.SetContentFile(self.checkpoint_path)
+            file.Upload()
+
+class Image_classifier():
 
     def __init__(self, tfrecords_folder, batch_size=128, use_TPU=False,
-            transfer_model='Inception', load_model=False):
+            transfer_model='Inception', load_model=False, legacy=False):
         
         self.current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
         self.parent_dir = os.path.dirname(self.current_dir)
@@ -51,6 +95,10 @@ class image_classifier():
         self.batch_size = batch_size
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
+        
+        if  not tf.__version__.split('.')[1] == '14' and not legacy:
+            raise Exception('This notebook is not compatible with lower version of Tensorflow 1.14, please use legacy mode')
+        self.legacy = legacy
         
         # We expect the classes to be the name of the folders in the training set
         self.categories = sorted(os.listdir(self.train_dir))
@@ -94,7 +142,7 @@ class image_classifier():
         self.validation_steps = int(nb_val_images / self.batch_size)
         print('Val steps per epochs = '+str(self.validation_steps))
 
-        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
+        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet', 'B3']:
             self.target_size = (299, 299)
         else:
             self.target_size = (224, 224)
@@ -127,7 +175,7 @@ class image_classifier():
             example = tf.io.parse_single_example(example, features)
             image = tf.image.decode_jpeg(example['image'], channels=3)
             image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-            feature = tf.image.resize_images(image, [*self.target_size])
+            feature = tf.image.resize(image, [*self.target_size])
             label = tf.cast([example['label']], tf.int32)
             return feature, label
 
@@ -153,11 +201,51 @@ class image_classifier():
         dataset = dataset.prefetch(AUTO)
         return dataset
 
+    def get_batched_dataset(self, is_training, nb_readers):
+        
+        def _read_tfrecord(example):
+            features = {
+                'image': tf.FixedLenFeature((), tf.string),
+                'label': tf.FixedLenFeature((), tf.int64),
+            }
+            example = tf.parse_single_example(example, features)
+            image = tf.image.decode_jpeg(example['image'], channels=3)
+            image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+            feature = tf.image.resize_images(image, [*self.target_size])
+            label = tf.cast([example['label']], tf.int32)
+            return feature, label
+
+        def _load_dataset(filenames):
+            buffer_size = 8 * 1024 * 1024  # 8 MiB per file
+            dataset = tf.data.TFRecordDataset(
+                filenames, buffer_size=buffer_size)
+            return dataset
+        
+        file_pattern = os.path.join(
+            self.tfrecords_folder, "train/*" if is_training else "val/*")
+        dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
+        dataset = dataset.apply(tf.data.experimental.parallel_interleave(
+                                _load_dataset, cycle_length=nb_readers,
+                                sloppy=is_training))
+        if is_training:
+            dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
+                buffer_size=math.ceil(self.training_shard_size*self.nb_train_shards/4)))
+        else:
+            dataset = dataset.repeat()
+        dataset = dataset.apply(tf.data.experimental.map_and_batch(
+                                _read_tfrecord, batch_size=self.batch_size,
+                                num_parallel_calls=AUTO, drop_remainder=True))
+        dataset = dataset.prefetch(AUTO)
+        return dataset
+
     def get_training_dataset(self):
-        return self.get_input_dataset(True, self.nb_train_shards)
+
+        return self.get_batched_dataset(True, self.nb_train_shards) if self.legacy else self.get_input_dataset(True, self.nb_train_shards)
+                
 
     def get_validation_dataset(self):
-        return self.get_input_dataset(False, self.nb_val_shards)
+        
+        return self.get_batched_dataset(False, self.nb_val_shards) if self.legacy else self.get_input_dataset(False, self.nb_val_shards)
     
     
     # print examples of images not properly classified...
@@ -369,34 +457,66 @@ class image_classifier():
         plt.xticks([])
         plt.yticks([])
         plt.show()
-            
-    def hyperband(self):
-        # TODO Warning Keras Tuner is still not finished
-        from kerastuner.tuners import UltraBand
-        from kerastuner.distributions import Fixed, Boolean, Choice, Range, Logarithmic, Linear
         
-        epochs = Range(name='epochs', start=1, stop=10)
-        hidden_size = Choice(name='hidden_size', selection=[256, 512, 1024, 2048])
-        learning_rate = Logarithmic(name='learning_rate', start=1e-6, stop=1e-2, num_buckets=10)
-        dropout = Fixed(name='dropout', value=0.9)
-        l2_lambda = Logarithmic(name='learning_rate', start=0, stop=0.1, num_buckets=10)
         
-        tuner = UltraBand(self.fit(epochs=epochs, 
-                                   hidden_size=hidden_size, 
-                                   learning_rate=learning_rate,
-                                   dropout=dropout, 
-                                   l2_lambda=l2_lambda), 
-                          objective='val_sparse_categorical_accuracy', 
-                          label_names=self.categories)
+    def evaluate(self):
+        test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
+        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
+                                                       target_size=self.target_size,
+                                                       shuffle=False,
+                                                       interpolation='bilinear',
+                                                       color_mode='rgb',
+                                                       class_mode='sparse',
+                                                       batch_size=self.nb_test_images)
 
-        tuner.search(self.get_training_dataset,
-                     validation_data=self.get_validation_dataset)
+        self.test_results = self.model.evaluate_generator(
+                generator=test_generator)
+        print('Accuracy of', self.test_results[1]*100, '%')
+    
+    def save_model(self, path='/data/trained_models'):
+        if not os.path.exists(os.path.join(self.parent_dir,path)):
+            os.makedirs(os.path.join(self.parent_dir,path))
+        self.model.save(os.path.join(os.path.join(self.parent_dir,path), 'trained_model.h5'))
+        print('Model saved!')
+            
+    def extract_SavedModel(self, path='./image_classifier/1/'):
+        with tf.keras.backend.get_session() as sess:
+                tf.saved_model.simple_save(
+                    sess,
+                    path,
+                    inputs={'input_image': self.model.input},
+                    outputs={t.name: t for t in self.model.outputs})
+           
+    # TODO Warning Keras Tuner is still not finished and this is WiP
+# =============================================================================
+#     def hyperband(self):
+#         
+#         from kerastuner.tuners import UltraBand
+#         from kerastuner.distributions import Fixed, Boolean, Choice, Range, Logarithmic, Linear
+#         
+#         epochs = Range(name='epochs', start=1, stop=10)
+#         hidden_size = Choice(name='hidden_size', selection=[256, 512, 1024, 2048])
+#         learning_rate = Logarithmic(name='learning_rate', start=1e-6, stop=1e-2, num_buckets=10)
+#         dropout = Fixed(name='dropout', value=0.9)
+#         l2_lambda = Logarithmic(name='learning_rate', start=0, stop=0.1, num_buckets=10)
+#         
+#         tuner = UltraBand(self.fit(epochs=epochs, 
+#                                    hidden_size=hidden_size, 
+#                                    learning_rate=learning_rate,
+#                                    dropout=dropout, 
+#                                    l2_lambda=l2_lambda), 
+#                           objective='val_sparse_categorical_accuracy', 
+#                           label_names=self.categories)
+# 
+#         tuner.search(self.get_training_dataset,
+#                      validation_data=self.get_validation_dataset)
+# =============================================================================
             
     # optimize the hyperparameters of the model
     def hyperparameter_optimization(self, num_iterations=20, save_results=True,
                                      display_plot=False, n_random_starts=10,
-                                     cutoff_regularization=False, min_accuracy=None,
-                                     load_checkpoint=False):
+                                     cutoff_regularization=False, min_accuracy=None):
+        
         """
         min_accuracy: minimum value of categorical accuracy we want after 1 iteration
         num_iterations: number of hyperparameter combinations we try (aim for a 1:1 to 2:1 ration num_iterations/n_random_starts)   
@@ -405,20 +525,13 @@ class image_classifier():
 
         self.min_accuracy = min_accuracy
 
-        # import scikit-optimize libraries
-        from skopt import gp_minimize
-        from skopt.space import Real, Integer
-        from skopt.plots import plot_convergence
-        from skopt.utils import use_named_args
-        from skopt.callbacks import CheckpointSaver
-
         # declare the hyperparameters search space
-        dim_epochs = Integer(low=1, high=10, name='epochs')
-        dim_hidden_size = Integer(low=512, high=2048, name='hidden_size')
-        dim_learning_rate = Real(low=1e-6, high=1e-2, prior='log-uniform',
+        dim_epochs = skopt.space.Integer(low=1, high=8, name='epochs')
+        dim_hidden_size = skopt.space.Integer(low=512, high=2048, name='hidden_size')
+        dim_learning_rate = skopt.space.Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
-        dim_dropout = Real(low=0, high=0.9, name='dropout')
-        dim_l2_lambda = Real(low=1e-6, high=1e-2, prior='log-uniform',
+        dim_dropout = skopt.space.Real(low=0, high=0.9, name='dropout')
+        dim_l2_lambda = skopt.space.Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='l2_lambda')
 
         dimensions = [dim_epochs,
@@ -429,33 +542,33 @@ class image_classifier():
 
         # read default parameters from last optimization
         try:
-            with open(self.parent_dir + '/data/trained_models/hyperparameters_search.pickle', 'rb') as f:
-                sr = dill.load(f)
-            default_parameters = sr.x
-            print('parameters of previous optimization loaded!')
-
+            res = skopt.load(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'))
+            x0 = res.x_iters
+            y0 = res.func_vals
+            start_from_checkpoint = True
+            print('Parameters of previous optimization loaded!')
         except:
             # fall back default values
-            default_parameters = [2, 1024, 1e-3, 0.5, 5e-4]
+            default_parameters = [2, 1024, 5e-4, 0.9, 1e-3]
+            start_from_checkpoint = False
             
         if not os.path.exists(self.parent_dir + '/data/trained_models'):
                 os.makedirs(self.parent_dir + '/data/trained_models')
-            
-        checkpoint_saver = CheckpointSaver(self.parent_dir + '/data/trained_models/checkpoint.pkl')
-            
-        self.number_iterations = 0
+
+        # Set `store_objective`
+        # to `False` if your objective function (`.specs['args']['func']`) is
+        # unserializable (i.e. if an exception is raised when trying to serialize
+        # the optimization result)                
+        checkpoint_saver = skopt.callbacks.CheckpointSaver(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'), store_objective=False)
+        checkpoint_dowloader = CheckpointDownloader(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'))
+        verbose = skopt.callbacks.VerboseCallback(n_total=num_iterations)
 
         # declare the fitness function
-        @use_named_args(dimensions=dimensions)
-        def fitness(epochs, hidden_size, learning_rate, dropout, l2_lambda):
-
-            self.number_iterations += 1
+        @skopt.utils.use_named_args(dimensions=dimensions)
+        def _fitness(epochs, hidden_size, learning_rate, dropout, l2_lambda):
             
-            if os.path.exists(self.parent_dir + '/data/trained_models/checkpoint.pkl'):
-                from google.colab import files
-                files.download(self.parent_dir + '/data/trained_models/checkpoint.pkl')
-
             # print the hyper-parameters
+            print('Fitnessing hyper-parameters')
             print('epochs:', epochs)
             print('hidden_size:', hidden_size)
             print('learning rate:', learning_rate)
@@ -469,21 +582,16 @@ class image_classifier():
             # extract fitness
             fitness = self.fitness
 
-            print('CALCULATED FITNESS AT ITERATION',
-                  self.number_iterations, 'OF:', fitness)
+            print('CALCULATED FITNESS OF:', fitness)
 
             del self.model
             tf.keras.backend.clear_session()
-
-            return -1*fitness
-
+            return -fitness
+        
         # optimization
-        if load_checkpoint and os.path.exists(self.parent_dir + '/data/trained_models/checkpoint.pkl'):
-            from skopt import load
-            res = load(self.parent_dir + '/data/trained_models/checkpoint.pkl')
-            x0 = res.x_iters
-            y0 = res.func_vals
-            self.search_result = gp_minimize(func=fitness,
+        if start_from_checkpoint:
+            print('Continuous fitness')
+            search_result = skopt.gp_minimize(func=_fitness,
                                              dimensions=dimensions,
                                              x0=x0,    # already examined values for x
                                              y0=y0,    # observed values for x0
@@ -491,39 +599,39 @@ class image_classifier():
                                              acq_func='EI',
                                              n_calls=num_iterations,
                                              n_random_starts=n_random_starts,
-                                             callback=[checkpoint_saver])
+                                             callback=[checkpoint_saver,checkpoint_dowloader,verbose])
         else:
-            self.search_result = gp_minimize(func=fitness,
+            print('New fitness')
+            search_result = skopt.gp_minimize(func=_fitness,
                                              dimensions=dimensions,
                                              # Expected Improvement.
                                              acq_func='EI',
                                              n_calls=num_iterations,
                                              n_random_starts=n_random_starts,
                                              x0=default_parameters,
-                                             callback=[checkpoint_saver])
+                                             callback=[checkpoint_saver,checkpoint_dowloader,verbose])
 
         if save_results:
             with open(self.parent_dir + '/data/trained_models/hyperparameters_dimensions.pickle', 'wb') as f:
                 dill.dump(dimensions, f)
 
             with open(self.parent_dir + '/data/trained_models/hyperparameters_search.pickle', 'wb') as f:
-                dill.dump(self.search_result.x, f)
+                dill.dump(search_result.x, f)
 
             print("Hyperparameter search saved!")
 
         if display_plot:
-            plot_convergence(self.search_result)
+            skopt.plots.plot_convergence(search_result)
 
         # build results dictionary
-        results_dict = {dimensions[i].name: self.search_result.x[i]
+        results_dict = {dimensions[i].name: search_result.x[i]
                         for i in range(len(dimensions))}
         print('Optimal hyperameters found of:')
         print(results_dict)
-        print()
-        print('Optimal fitness value of:', -float(self.search_result.fun))       
+        print('Optimal fitness value of:', -float(search_result.fun))       
         
     # we fit the model given the images in the training set
-    def fit(self, learning_rate=1e-3, epochs=5, activation='relu', hidden_size=1024, 
+    def fit(self, learning_rate=1e-3, epochs=5, activation='swish', hidden_size=1024, 
             include_class_weight=False, save_model=False, dropout=0.5, verbose=True, 
             fine_tuning=True, l2_lambda=5e-4, min_accuracy=None, callbacks=None,
             extract_SavedModel=False, bn_after_ac=False):
@@ -531,11 +639,11 @@ class image_classifier():
         # Useful to avoid clutter from old models / layers.
         tf.keras.backend.clear_session()
         
-        # As we know SWISH activation function recently published by a team at Google. If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x))
+        # As we know SWISH activation function recently published by a team at Google. If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) https://arxiv.org/abs/1710.05941
         def _swish(x):
             return (tf.keras.backend.sigmoid(x) * x)
 
-        tf.keras.utils.get_custom_objects().update({'swish': tf.keras.layers.Activation(_swish)})
+        tf.keras.utils.get_custom_objects().update({'swish': Swish(_swish)})
 
         # if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
@@ -569,25 +677,27 @@ class image_classifier():
             # load the pretrained model, without the classification (top) layers
             if self.transfer_model == 'Xception':
                 base_model = tf.keras.applications.Xception(weights='imagenet',
-                                      include_top=False, input_shape=(299, 299, 3))
+                                      include_top=False, input_shape=(*self.target_size, 3))
                 based_model_last_block = 116  # last block 126, two blocks 116
             elif self.transfer_model == 'Inception_Resnet':
                 base_model = tf.keras.applications.InceptionResNetV2(
-                        weights='imagenet', include_top=False, input_shape=(299, 299, 3))
+                        weights='imagenet', include_top=False, input_shape=(*self.target_size, 3))
                 based_model_last_block = 287  # last block 630, two blocks 287 
             elif self.transfer_model == 'Resnet':
                 base_model = tf.keras.applications.ResNet50(weights='imagenet',
-                                      include_top=False, input_shape=(224, 224, 3))
+                                      include_top=False, input_shape=(*self.target_size, 3))
                 based_model_last_block = 155  # last block 165, two blocks 155
             elif self.transfer_model == 'B0':
-                base_model = EfficientNetB0(weights='imagenet',include_top=False)
+                base_model = EfficientNetB0(weights='imagenet',include_top=False,
+                                            input_shape=(*self.target_size, 3))
                 based_model_last_block = 213  # last block 229, two blocks 213
             elif self.transfer_model == 'B3':
-                base_model = EfficientNetB3(weights='imagenet',include_top=False)
+                base_model = EfficientNetB3(weights='imagenet',include_top=False,
+                                            input_shape=(*self.target_size, 3))
                 based_model_last_block = 354  # last block 370, two blocks 354
             else:
                 base_model = tf.keras.applications.InceptionV3(weights='imagenet',
-                                      include_top=False, input_shape=(299, 299, 3))
+                                      include_top=False, input_shape=(*self.target_size, 3))
                 based_model_last_block = 249  # last block 280, two blocks 249
    
             # Set only the top layers as trainable (if we want to do fine-tuning,
@@ -624,30 +734,52 @@ class image_classifier():
             return tf.keras.Model(inputs=base_model.input, outputs=predictions), base_model, based_model_last_block, loss, metrics, optimizer
         
         # compile the model and fit the model
-        if self.use_TPU:
-            tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-            tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
-            strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=1)
-            
-            with strategy.scope():
-                model, base_model, based_model_last_block, loss, metrics, optimizer = _create_model()
+        if self.legacy :
+            model, base_model, based_model_last_block, loss, metrics, optimizer = _create_model()
+            if self.use_TPU:
+                resolver = tf.contrib.cluster_resolver.TPUClusterResolver()
+                strategy=tf.contrib.tpu.TPUDistributionStrategy(resolver)
                 print('Compiling for TPU')
                 model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                model = tf.contrib.tpu.keras_to_tpu_model(model, strategy=strategy)
+                print('Fitting')
+                history = model.fit(self.get_training_dataset, steps_per_epoch=self.steps_per_epoch, epochs=epochs,
+                                    validation_data=self.get_validation_dataset, validation_steps=self.validation_steps,
+                                    verbose=verbose, callbacks=callbacks, class_weight=class_weight)
+            else:
+                print('Compiling for CPU/GPU')
+                model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                print('Fitting')
+                history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=epochs,
+                                    validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
+                                    verbose=verbose, callbacks=callbacks, class_weight=class_weight)
         else:
-            model, base_model, based_model_last_block, loss, metrics, optimizer =_create_model()
-            print('Compiling for CPU/GPU')
-            model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+            if self.use_TPU:
+                tpu_cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+                tf.tpu.experimental.initialize_tpu_system(tpu_cluster_resolver)
+                strategy = tf.distribute.experimental.TPUStrategy(tpu_cluster_resolver, steps_per_run=1)
+                
+                with strategy.scope():
+                    model, base_model, based_model_last_block, loss, metrics, optimizer = _create_model()
+                    print('Compiling for TPU')  
+                    model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                    
+            else:
+                model, base_model, based_model_last_block, loss, metrics, optimizer =_create_model()
+                print('Compiling for CPU/GPU')
+                model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                
+            print('Fitting')
+            history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=epochs,
+                                validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
+                                verbose=verbose, callbacks=callbacks, class_weight=class_weight)
         
-        print('Fitting')
-        history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=epochs,
-                            validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
-                            verbose=verbose, callbacks=callbacks, class_weight=class_weight)
 
         # Fine-tune the model, if we wish so
         if fine_tuning and not model.stop_training:
-            print('============')
-            print('Begin fine-tuning')
-            print('============')
+            print('===========')
+            print('Fine-tuning')
+            print('===========')
             
             fine_tune_epochs = epochs
             total_epochs =  epochs + fine_tune_epochs
@@ -662,66 +794,58 @@ class image_classifier():
 
             # Fit the model
             # we need to recompile the model for these modifications to take effect with a low learning rate
-            if self.use_TPU:
-                with strategy.scope():
+            if self.legacy:
+                print('Recompiling model')
+                optimizer = tf.keras.optimizers.Adam(lr=learning_rate*0.1)
+                model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                if self.use_TPU:
+                    print('Fine fitting')
+                    history = model.fit(self.get_training_dataset, steps_per_epoch=self.steps_per_epoch, epochs=total_epochs,
+                                        validation_data=self.get_validation_dataset, validation_steps=self.validation_steps,
+                                        verbose=verbose, callbacks=callbacks, class_weight=class_weight,
+                                        initial_epoch=epochs)
+                else:
+                    print('Fine fitting')
+                    history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=total_epochs,
+                                        validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
+                                        verbose=verbose, callbacks=callbacks, class_weight=class_weight,
+                                        initial_epoch=epochs)
+            else:
+                if self.use_TPU:
+                    with strategy.scope():
+                        print('Recompiling model')
+                        optimizer = tf.keras.optimizers.Adam(lr=learning_rate*0.1)
+                        model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
+                else:
                     print('Recompiling model')
                     optimizer = tf.keras.optimizers.Adam(lr=learning_rate*0.1)
                     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-            else:
-                print('Recompiling model')
                 
-                optimizer = tf.keras.optimizers.Adam(lr=learning_rate*0.1)
-                model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-                
-            print('Fine fitting')
-            history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=total_epochs,
-                                validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
-                                verbose=verbose, callbacks=callbacks, class_weight=class_weight,
-                                initial_epoch=epochs)
+                print('Fine fitting')
+                history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=total_epochs,
+                                    validation_data=self.get_validation_dataset(), validation_steps=self.validation_steps,
+                                    verbose=verbose, callbacks=callbacks, class_weight=class_weight,
+                                    initial_epoch=epochs)
+            
+            
 
         # Evaluate the model, just to be sure
         self.fitness = history.history['val_sparse_categorical_accuracy'][-1]
-
+        self.model = model
+        del history
+        del model
+        
         # Save the model
         if save_model:
-            if not os.path.exists(self.parent_dir + '/data/trained_models'):
-                os.makedirs(self.parent_dir + '/data/trained_models')
-            model.save(self.parent_dir + '/data/trained_models/trained_model.h5')
-            print('Model saved!')
+            self.save_model()
 
         # save model in production format
         if extract_SavedModel:
-            export_path = "./image_classifier/1/"
+            self.extract_SavedModel()
 
-            with tf.keras.backend.get_session() as sess:
-                tf.saved_model.simple_save(
-                    sess,
-                    export_path,
-                    inputs={'input_image': model.input},
-                    outputs={t.name: t for t in model.outputs})
-
-        else:
-            self.model = model
-            del history
-            del model
-
-    def evaluate(self):
-        test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
-        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
-                                                       target_size=self.target_size,
-                                                       shuffle=False,
-                                                       interpolation='bilinear',
-                                                       color_mode='rgb',
-                                                       class_mode='sparse',
-                                                       batch_size=self.nb_test_images)
-
-        self.test_results = self.model.evaluate_generator(
-                generator=test_generator)
-        print('Accuracy of', self.test_results[1]*100, '%')
-
-
+    
 if __name__ == '__main__':
-    classifier = image_classifier()
+    classifier = Image_classifier()
 #   classifier.fit(save_model=False, epochs=4, hidden_size=222,
 #                   learning_rate=0.00024,
 #                   fine_tuning=True, transfer_model='Inception_Resnet',
