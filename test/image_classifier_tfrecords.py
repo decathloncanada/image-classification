@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import skopt
 import dill
+import datetime
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from google.colab import auth
@@ -146,16 +147,18 @@ class Image_classifier():
             self.target_size = (299, 299)
         else:
             self.target_size = (224, 224)
+            
+        # As we know SWISH activation function recently published by a team at Google. If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) https://arxiv.org/abs/1710.05941
+        def _swish(x):
+            return (tf.keras.backend.sigmoid(x) * x)
+
+        tf.keras.utils.get_custom_objects().update({'swish': Swish(_swish)})
         
         if load_model:
-            try:
-                # Useful to avoid clutter from old models / layers.
-                tf.keras.backend.clear_session()
-                self.model = tf.keras.models.load_model(os.path.join(self.parent_dir, 'data/trained_models/trained_model.h5'))
-                print('Model loaded !')
-                # self.model.summary()
-            except:
-                print('Loading model error')
+            # Useful to avoid clutter from old models / layers.
+            tf.keras.backend.clear_session()
+            self.model = tf.keras.models.load_model(os.path.join(self.parent_dir, 'data/trained_models/trained_model.h5'))
+            print('Model loaded !')
 
         
     """
@@ -412,8 +415,8 @@ class Image_classifier():
             images.append(next(test_generator)) 
         images = np.reshape(np.asarray(images), [-1, *self.target_size, 3])
         print('Test images loaded')
-            
-        cls_pred =  self.model.predict_on_batch(images)
+           
+        cls_pred =  self.model.predict(images, batch_size=1) # Batch size = 1 to avoid OOM
         tf.keras.backend.clear_session()
         print('Test labels loaded')
         
@@ -467,7 +470,7 @@ class Image_classifier():
                                                        interpolation='bilinear',
                                                        color_mode='rgb',
                                                        class_mode='sparse',
-                                                       batch_size=self.nb_test_images)
+                                                       batch_size=self.batch_size)
 
         self.test_results = self.model.evaluate_generator(
                 generator=test_generator)
@@ -547,6 +550,8 @@ class Image_classifier():
             y0 = res.func_vals
             start_from_checkpoint = True
             print('Parameters of previous optimization loaded!')
+            print(x0)
+            print(y0)
         except:
             # fall back default values
             default_parameters = [2, 1024, 5e-4, 0.9, 1e-3]
@@ -581,8 +586,6 @@ class Image_classifier():
 
             # extract fitness
             fitness = self.fitness
-
-            print('CALCULATED FITNESS OF:', fitness)
 
             del self.model
             tf.keras.backend.clear_session()
@@ -633,26 +636,27 @@ class Image_classifier():
     # we fit the model given the images in the training set
     def fit(self, learning_rate=1e-3, epochs=5, activation='swish', hidden_size=1024, 
             include_class_weight=False, save_model=False, dropout=0.5, verbose=True, 
-            fine_tuning=True, l2_lambda=5e-4, min_accuracy=None, callbacks=None,
+            fine_tuning=True, l2_lambda=5e-4, min_accuracy=None, logs=None,
             extract_SavedModel=False, bn_after_ac=False):
 
         # Useful to avoid clutter from old models / layers.
         tf.keras.backend.clear_session()
         
-        # As we know SWISH activation function recently published by a team at Google. If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) https://arxiv.org/abs/1710.05941
-        def _swish(x):
-            return (tf.keras.backend.sigmoid(x) * x)
-
-        tf.keras.utils.get_custom_objects().update({'swish': Swish(_swish)})
+        callbacks = None
+        if logs is not None:
+            logdir = os.path.join(logs, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+            print('Fit log dir : ' + logdir)
+            tensorboard_callback = tf.keras.callbacks.TensorBoard(logdir)
+            callbacks = [tensorboard_callback]
 
         # if we want stop training when no sufficient improvement in accuracy has been achieved
         if min_accuracy is not None:
-            callback = tf.keras.callbacks.EarlyStopping(
-                monitor='sparse_categorical_accuracy', baseline=min_accuracy)
+            early_stop = tf.keras.callbacks.EarlyStopping(monitor='sparse_categorical_accuracy', 
+                                                        baseline=min_accuracy)
             if callbacks is None:
-                callbacks = [callback]
+                callbacks = [early_stop]
             else:
-                callbacks.append(callback)
+                callbacks.append(early_stop)
 
         # if we want to weight the classes given the imbalanced number of images
         if include_class_weight:
