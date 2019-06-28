@@ -23,6 +23,7 @@ import tensorflow as tf
 import skopt
 import dill
 import datetime
+import glob
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from google.colab import auth
@@ -96,6 +97,7 @@ class Image_classifier():
         self.batch_size = batch_size
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
+        self.use_GPU = tf.test.is_built_with_cuda()
         
         if  not tf.__version__.split('.')[1] == '14' and not legacy:
             raise Exception('This notebook is not compatible with lower version of Tensorflow 1.14, please use legacy mode')
@@ -401,9 +403,10 @@ class Image_classifier():
                     cls_true=[ cls_true[i] for i in random_errors],
                     cls_pred=[ cls_pred[i] for i in random_errors])
         
-    def classify(self):
+    def classify_folder(self, path=None):
+        if path == None : path = self.test_dir 
         test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
-        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
+        test_generator = test_datagen.flow_from_directory(directory=path, 
                                                        target_size=self.target_size,
                                                        shuffle=False,
                                                        interpolation='bilinear',
@@ -434,32 +437,34 @@ class Image_classifier():
             plt.yticks([])
             plt.show()
  
-    def classify_single_image(self, image_path):
-         #load the image
-        image = Image.open(image_path)
-        #reshape the image
-        image = image.resize(self.target_size, PIL.Image.BILINEAR).convert("RGB")
-        #convert the image into a numpy array
-        image = tf.keras.preprocessing.image.img_to_array(image)
-        #rescale the pixels to a 0-1 range
-        image = image.astype('float32') / 255.
-        # and expend to a size 4 tensor
-        image_tensor = np.expand_dims(image, axis=0)
-        #make and decode the prediction
-        result =  self.model.predict(image_tensor)[0]
-        #print image and top predictions
-        top_pred = np.argsort(result)[::-1][:3]
-        plt.imshow(image, interpolation='spline16')
-        # Name of the true class.
-        cls_pred_name = np.asarray(self.categories)[top_pred]
-        cls_pred_perc = result[top_pred]*100
-        xlabel = 'Prediction :\n'
-        for (x,y) in zip(cls_pred_name, cls_pred_perc):
-            xlabel += '{0}, {1:.2f}%\n'.format(x,y)
-        plt.xlabel(xlabel)
-        plt.xticks([])
-        plt.yticks([])
-        plt.show()
+    def classify_images(self, image_path):
+        images = glob.glob( os.path.join(image_path, '*.jpg') )
+        for image in images:
+            #load the image
+            image = Image.open(image)
+            #reshape the image
+            image = image.resize(self.target_size, PIL.Image.BILINEAR).convert("RGB")
+            #convert the image into a numpy array
+            image = tf.keras.preprocessing.image.img_to_array(image)
+            #rescale the pixels to a 0-1 range
+            image = image.astype('float32') / 255.
+            # and expend to a size 4 tensor
+            image_tensor = np.expand_dims(image, axis=0)
+            #make and decode the prediction
+            result =  self.model.predict(image_tensor)[0]
+            #print image and top predictions
+            top_pred = np.argsort(result)[::-1][:3]
+            plt.imshow(image, interpolation='spline16')
+            # Name of the true class.
+            cls_pred_name = np.asarray(self.categories)[top_pred]
+            cls_pred_perc = result[top_pred]*100
+            xlabel = 'Prediction :\n'
+            for (x,y) in zip(cls_pred_name, cls_pred_perc):
+                xlabel += '{0}, {1:.2f}%\n'.format(x,y)
+            plt.xlabel(xlabel)
+            plt.xticks([])
+            plt.yticks([])
+            plt.show()
         
         
     def evaluate(self):
@@ -490,7 +495,7 @@ class Image_classifier():
                     inputs={'input_image': self.model.input},
                     outputs={t.name: t for t in self.model.outputs})
            
-    # TODO Warning Keras Tuner is still not finished and this is WiP
+    # TODO Warning Keras Tuner is still not finished (Status: pre-alpha.)
 # =============================================================================
 #     def hyperband(self):
 #         
@@ -751,7 +756,7 @@ class Image_classifier():
                                     validation_data=self.get_validation_dataset, validation_steps=self.validation_steps,
                                     verbose=verbose, callbacks=callbacks, class_weight=class_weight)
             else:
-                print('Compiling for CPU/GPU')
+                print('Compiling for GPU') if self.use_GPU else print('Compiling for CPU')
                 model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
                 print('Fitting')
                 history = model.fit(self.get_training_dataset(), steps_per_epoch=self.steps_per_epoch, epochs=epochs,
@@ -770,7 +775,7 @@ class Image_classifier():
                     
             else:
                 model, base_model, based_model_last_block, loss, metrics, optimizer =_create_model()
-                print('Compiling for CPU/GPU')
+                print('Compiling for GPU') if self.use_GPU else print('Compiling for CPU')
                 model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
                 
             print('Fitting')
