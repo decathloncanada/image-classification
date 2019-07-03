@@ -75,7 +75,10 @@ class CheckpointDownloader(object):
             file.SetContentFile(self.checkpoint_path)
             file.Upload()
 
-class Image_classifier():
+class ImageClassifier():
+    
+    def _swish(self, inputs):
+        return (tf.keras.backend.sigmoid(inputs) * inputs)
 
     def __init__(self, tfrecords_folder, batch_size=128, use_TPU=False,
             transfer_model='Inception', load_model=False, legacy=False):
@@ -150,11 +153,8 @@ class Image_classifier():
         else:
             self.target_size = (224, 224)
             
-        # As we know SWISH activation function recently published by a team at Google. If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) https://arxiv.org/abs/1710.05941
-        def _swish(x):
-            return (tf.keras.backend.sigmoid(x) * x)
-
-        tf.keras.utils.get_custom_objects().update({'swish': Swish(_swish)})
+        # Init custom objects before loading     
+        tf.keras.utils.get_custom_objects().update({'swish': Swish(self._swish)})
         
         if load_model:
             # Useful to avoid clutter from old models / layers.
@@ -202,7 +202,7 @@ class Image_classifier():
             dataset = dataset.shuffle(buffer_size=math.ceil(self.training_shard_size*self.nb_train_shards/4))
         dataset = dataset.repeat()
         dataset = dataset.map(_read_tfrecord, num_parallel_calls=AUTO)
-        dataset = dataset.batch(batch_size=self.batch_size, drop_remainder=True)
+        dataset = dataset.batch(batch_size=self.batch_size, drop_remainder=self.use_TPU)
         dataset = dataset.prefetch(AUTO)
         return dataset
 
@@ -239,7 +239,7 @@ class Image_classifier():
             dataset = dataset.repeat()
         dataset = dataset.apply(tf.data.experimental.map_and_batch(
                                 _read_tfrecord, batch_size=self.batch_size,
-                                num_parallel_calls=AUTO, drop_remainder=True))
+                                num_parallel_calls=AUTO, drop_remainder=self.use_TPU))
         dataset = dataset.prefetch(AUTO)
         return dataset
 
@@ -286,7 +286,10 @@ class Image_classifier():
                    x=self.categories,
                    y=self.categories)
         data=[trace]
-        py.plot(data, filename=filename) 
+        # Plotly account required, see https://plot.ly/python/getting-started/
+        # import plotly
+        # plotly.tools.set_credentials_file(username='', api_key='')
+        py.iplot(data, filename=filename) 
         
     # function to plot images...
     # ...inspired by https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/10_Fine-Tuning.ipynb
@@ -465,35 +468,40 @@ class Image_classifier():
             plt.xticks([])
             plt.yticks([])
             plt.show()
-        
-        
-    def evaluate(self):
+    
+    def evaluate(self, path=None):
+        if path == None : path = self.test_dir 
         test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
-        test_generator = test_datagen.flow_from_directory(directory=self.test_dir, 
+        test_generator = test_datagen.flow_from_directory(directory=path, 
                                                        target_size=self.target_size,
                                                        shuffle=False,
                                                        interpolation='bilinear',
                                                        color_mode='rgb',
                                                        class_mode='sparse',
-                                                       batch_size=self.batch_size)
+                                                       batch_size=self.nb_test_images)
 
         self.test_results = self.model.evaluate_generator(
                 generator=test_generator)
         print('Accuracy of', self.test_results[1]*100, '%')
     
-    def save_model(self, path='/data/trained_models'):
-        if not os.path.exists(os.path.join(self.parent_dir,path)):
-            os.makedirs(os.path.join(self.parent_dir,path))
+    def save_model(self, path='data/trained_models'):
+        if not tf.gfile.Exists(os.path.join(self.parent_dir,path)):
+            tf.gfile.MkDir(os.path.join(self.parent_dir,path))
         self.model.save(os.path.join(os.path.join(self.parent_dir,path), 'trained_model.h5'))
         print('Model saved!')
             
-    def extract_SavedModel(self, path='./image_classifier/1/'):
+    def extract_saved_model(self, path='./image_classifier/1/'):
         with tf.keras.backend.get_session() as sess:
                 tf.saved_model.simple_save(
                     sess,
                     path,
                     inputs={'input_image': self.model.input},
                     outputs={t.name: t for t in self.model.outputs})
+        print('Model extracted!')
+                
+    def export_saved_model(self, path='./image_classifier/1/'):
+        tf.keras.experimental.export_saved_model(self.model, path, custom_objects={'swish': Swish(self._swish)})
+        print('Model exported!')
            
     # TODO Warning Keras Tuner is still not finished (Status: pre-alpha.)
 # =============================================================================
@@ -534,7 +542,7 @@ class Image_classifier():
         self.min_accuracy = min_accuracy
 
         # declare the hyperparameters search space
-        dim_epochs = skopt.space.Integer(low=1, high=8, name='epochs')
+        dim_epochs = skopt.space.Integer(low=1, high=10, name='epochs')
         dim_hidden_size = skopt.space.Integer(low=512, high=2048, name='hidden_size')
         dim_learning_rate = skopt.space.Real(low=1e-6, high=1e-2, prior='log-uniform',
                                  name='learning_rate')
@@ -642,7 +650,7 @@ class Image_classifier():
     def fit(self, learning_rate=1e-3, epochs=5, activation='swish', hidden_size=1024, 
             include_class_weight=False, save_model=False, dropout=0.5, verbose=True, 
             fine_tuning=True, l2_lambda=5e-4, min_accuracy=None, logs=None,
-            extract_SavedModel=False, bn_after_ac=False):
+            bn_after_ac=False, export_model=False):
 
         # Useful to avoid clutter from old models / layers.
         tf.keras.backend.clear_session()
@@ -849,12 +857,11 @@ class Image_classifier():
             self.save_model()
 
         # save model in production format
-        if extract_SavedModel:
-            self.extract_SavedModel()
-
-    
+        if export_model:
+            return self.extract_saved_model() if self.legacy else self.export_saved_model()
+        
 if __name__ == '__main__':
-    classifier = Image_classifier()
+    classifier = ImageClassifier()
 #   classifier.fit(save_model=False, epochs=4, hidden_size=222,
 #                   learning_rate=0.00024,
 #                   fine_tuning=True, transfer_model='Inception_Resnet',
