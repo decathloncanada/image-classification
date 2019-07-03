@@ -17,11 +17,9 @@ import os,sys,inspect
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir)
-
-print("Tensorflow version " + tf.__version__)
 AUTO = tf.data.experimental.AUTOTUNE 
 
-class generate_tfrecords:
+class TfrecordsGenerator:
     
     def __init__(self):
         self._create_graph()
@@ -51,7 +49,7 @@ class generate_tfrecords:
     #main method, to convert all images
     def convert_image_folder(self, img_folder=parentdir+'/data/image_dataset/train',
                              gcs_ouput=parentdir+'/data/image_dataset/train',
-                             shards=16):
+                             shards=16, target_size=(299, 299)):
         # Get all file names of images present in folder
         classes = sorted(os.listdir(img_folder))
         print(classes)
@@ -59,8 +57,6 @@ class generate_tfrecords:
         nb_images = len(tf.gfile.Glob(img_pattern))
         shard_size = math.ceil(1.0 * nb_images / shards)
         print("Pattern matches {} images which will be rewritten as {} .tfrec files containing {} images each.".format(nb_images, shards, shard_size))
-        
-        target_size = (299, 299)
         
         def decode_jpeg_and_label(filename):
             bits = tf.read_file(filename)
@@ -105,7 +101,7 @@ class generate_tfrecords:
             
             
 if __name__=='__main__':
-    transformer = generate_tfrecords()
+    transformer = TfrecordsGenerator()
     transformer.convert_image_folder(img_folder=parentdir+'/data/image_dataset/val',
                                      tfrecord_file_name=parentdir+'/data/image_dataset/val.tfrecord')
     

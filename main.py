@@ -8,7 +8,6 @@ Main function to train an algorithm and-or classify images from a trained model
 """
 import argparse
 import dill
-import io
 import numpy as np
 import operator
 import os
@@ -17,6 +16,7 @@ import PIL
 
 from src import extract_images as ext
 from src import image_classifier as ic
+from src import tfrecords_image_classifier as tic
 
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.preprocessing.image import img_to_array
@@ -66,7 +66,7 @@ parser.add_argument('--batch_size', type=int, default=20,
                     """)
 parser.add_argument('--transfer_model', type=str, default='Inception',
                     help="""
-                    Base model used for classification - Inception (V3), Xception, Inception_Resnet (V2) and Resnet (50) currently supported
+                    Base model used for classification - EfficientNet (B0 and B3), Inception (V3), Xception, Inception_Resnet (V2) and Resnet (50) currently supported
                     """)
 parser.add_argument('--use_TPU', type=int, default=0,
                     help="""
@@ -80,7 +80,18 @@ parser.add_argument('--min_accuracy', type=float, default=None,
                     help="""
                     Minimum training accuracy after 1 epoch to continue training
                     """)
-
+parser.add_argument('--legacy', type=int, default=0,
+                    help="""
+                    If we want (1) or not (0) to use with old tensorflow version
+                    """)
+parser.add_argument('--use_tfrecords', type=int, default=0,
+                    help="""
+                    If we want (1) or not (0) to use tfrecords
+                    """)
+parser.add_argument('--tfrecords_folder', type=str, default=None,
+                    help="""
+                    Path of the tfrecords folder
+                    """)
 args = parser.parse_args()
 
 #verify the format of the arguments
@@ -109,14 +120,14 @@ if args.task == 'fit':
     else:
         print('extract_SavedModel argument is not 0 or 1')
         args.task = 'pass'
-        
-if args.use_TPU == 1:
-    use_TPU=True
-elif args.use_TPU == 0:
-    use_TPU=False
-else:
-    print('use_TPU argument is not 0 or 1')
-    args.task = 'pass'
+    
+    if args.use_TPU == 1:
+        use_TPU=True
+    elif args.use_TPU == 0:
+        use_TPU=False
+    else:
+        print('use_TPU argument is not 0 or 1')
+        args.task = 'pass'
     
 if not (args.number_iterations > args.n_random_starts and isinstance(args.number_iterations, int)):
     print('number_iterations has to be an integer greater than 10')
@@ -133,11 +144,11 @@ if args.task == 'classify':
         print('Unknown path')
         args.task = 'pass'
         
-if args.transfer_model not in ['Inception', 'Xception', 'Resnet', 'Inception_Resnet']:    
-    print(args.transfer_model + ' not supported. transfer_model supported: Inception, Xception, Inception_Resnet and Resnet')
+if args.transfer_model not in ['Inception', 'Xception', 'Resnet', 'Inception_Resnet', 'B0', 'B3']:    
+    print(args.transfer_model + ' not supported. transfer_model supported: Inception, EfficientNet, Xception, Inception_Resnet and Resnet')
     args.task = 'pass'
 else:
-    if args.transfer_model in ['Inception', 'Xception', 'Inception_Resnet']:
+    if args.transfer_model in ['Inception', 'Xception', 'Inception_Resnet', 'B3']:
         target_size = (299, 299)
     else:
         target_size = (224, 224)
@@ -151,6 +162,27 @@ if args.min_accuracy is not None:
     if not (args.min_accuracy > 0 and isinstance(args.min_accuracy, float) and args.min_accuracy < 1):
         print('min_accuracy has to be a float number between 0 and 1')
         args.task = 'pass'
+
+    
+if args.use_tfrecords == 1:
+    use_tfrecords=True
+elif args.use_tfrecords == 0:
+    use_tfrecords=False
+else:
+    print('use_tfrecords argument is not 0 or 1')
+    args.task = 'pass'
+
+if use_tfrecords == True and args.tfrecords_folder == None:
+    print('Has to have a tfrecords folder when using tfrecords')
+    args.task = 'pass'
+    
+if args.legacy == 1:
+    legacy=True
+elif args.legacy == 0:
+    legacy=False
+else:
+    print('legacy argument is not 0 or 1')
+    args.task = 'pass'
 
 #function to preprocess the image
 def prepare_image(image):
@@ -218,14 +250,26 @@ def fit():
     except:
         print('Could not find optimal hyperparameters. Selecting default values')
         opt_params = {}
-    
-    classifier = ic.image_classifier()
-    classifier.fit(save_model=save_model, 
-                   extract_SavedModel=extract_SavedModel,
-                   use_TPU=use_TPU,
-                   transfer_model=args.transfer_model,
-                   min_accuracy = args.min_accuracy,
-                   **opt_params)
+        
+    if use_tfrecords:
+        classifier = tic.image_classifier(tfrecords_folder=args.tfrecords_folder,
+                                          batch_size=args.batch_size, 
+                                          use_TPU=use_TPU,
+                                          transfer_model=args.transfer_model, 
+                                          load_model=False, 
+                                          legacy=legacy)
+        classifier.fit(save_model=save_model, 
+                       extract_SavedModel=extract_SavedModel,
+                       min_accuracy = args.min_accuracy,
+                       **opt_params)
+    else:
+        classifier = ic.image_classifier()
+        classifier.fit(save_model=save_model, 
+                       extract_SavedModel=extract_SavedModel,
+                       use_TPU=use_TPU,
+                       transfer_model=args.transfer_model,
+                       min_accuracy = args.min_accuracy,
+                       **opt_params)
     
 #function to evaluate the classification accuracy
 def evaluate():
