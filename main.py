@@ -16,7 +16,7 @@ import PIL
 
 from src import extract_images as ext
 from src import image_classifier as ic
-from src import tfrecords_image_classifier as tic
+from src.tfrecords_image_classifier import ImageClassifier
 
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.preprocessing.image import img_to_array
@@ -141,9 +141,6 @@ if args.task == 'fit':
     
     if args.use_TPU == 1:
         use_TPU=True
-        if not use_tfrecords:
-            print('Need to use tfrecords with TPU')
-            args.task = 'pass'
     elif args.use_TPU == 0:
         use_TPU=False
     else:
@@ -223,13 +220,23 @@ def extract_images():
     
 #function to perform hyperparameter optimization
 def hyperparameters():
-    classifier = ic.image_classifier()
-    classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
-                                            n_random_starts = args.n_random_starts,
-                                            batch_size=args.batch_size,
-                                            use_TPU=use_TPU,
-                                            transfer_model=args.transfer_model,
-                                            min_accuracy = args.min_accuracy)
+    if use_tfrecords:
+        classifier = ImageClassifier(tfrecords_folder=args.tfrecords_folder,
+                                     batch_size=args.batch_size, 
+                                     use_TPU=use_TPU,
+                                     transfer_model=args.transfer_model,
+                                     legacy=legacy)
+        classifier.hyperparameter_optimization(num_iterations=args.number_iterations, 
+                                               n_random_starts=args.n_random_starts,
+                                               min_accuracy = args.min_accuracy)
+    else:   
+        classifier = ic.image_classifier()
+        classifier._hyperparameter_optimization(num_iterations=args.number_iterations,
+                                                n_random_starts = args.n_random_starts,
+                                                batch_size=args.batch_size,
+                                                use_TPU=use_TPU,
+                                                transfer_model=args.transfer_model,
+                                                min_accuracy = args.min_accuracy)
     
 #function to split training set into a training/validation set
 def split_training():
@@ -252,11 +259,11 @@ def fit():
         opt_params = {}
         
     if use_tfrecords:
-        classifier = tic.ImageClassifier(tfrecords_folder=args.tfrecords_folder,
-                                          batch_size=args.batch_size, 
-                                          use_TPU=use_TPU,
-                                          transfer_model=args.transfer_model,
-                                          legacy=legacy)
+        classifier = ImageClassifier(tfrecords_folder=args.tfrecords_folder,
+                                     batch_size=args.batch_size, 
+                                     use_TPU=use_TPU,
+                                     transfer_model=args.transfer_model,
+                                     legacy=legacy)
         classifier.fit(save_model=save_model, 
                        export_model=extract_SavedModel,
                        min_accuracy = args.min_accuracy,
