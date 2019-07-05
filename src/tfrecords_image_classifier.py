@@ -479,19 +479,14 @@ class ImageClassifier():
                 generator=test_generator)
         print('Accuracy of', self.test_results[1]*100, '%')
     
-    def save_model(self, path='/data/trained_models'):
+    def save_model(self, path='data/trained_models'):
         if not tf.gfile.Exists(os.path.join(self.parent_dir,path)):
             tf.gfile.MkDir(os.path.join(self.parent_dir,path))
         self.model.save(os.path.join(os.path.join(self.parent_dir,path), 'trained_model.h5'))
         print('Model saved!')
             
     def extract_saved_model(self, path='./image_classifier/1/'):
-        with tf.keras.backend.get_session() as sess:
-                tf.saved_model.simple_save(
-                    sess,
-                    path,
-                    inputs={'input_image': self.model.input},
-                    outputs={t.name: t for t in self.model.outputs})
+        tf.contrib.saved_model.save_keras_model(self.model, path, custom_objects={'swish': Swish(self._swish)})
         print('Model extracted!')
                 
     def export_saved_model(self, path='./image_classifier/1/'):
@@ -819,17 +814,16 @@ class ImageClassifier():
 
         # Evaluate the model, just to be sure
         self.fitness = history.history['val_sparse_categorical_accuracy'][-1]
-        self.model = model
+        self.model = model.sync_to_cpu();print('Sync to CPU') if self.use_TPU else model
         del history
         del model
-        
         # Save the model
         if save_model:
             self.save_model()
-
         # save model in production format
+        # https://medium.com/tensorflow/serving-ml-quickly-with-tensorflow-serving-and-docker-7df7094aa008
         if export_model:
-            return self.extract_saved_model() if self.legacy else self.export_saved_model()
+            self.extract_saved_model() if self.legacy else self.export_saved_model()
 
 if __name__ == '__main__':
     classifier = ImageClassifier()

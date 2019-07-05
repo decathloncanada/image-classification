@@ -120,9 +120,30 @@ if args.task == 'fit':
     else:
         print('extract_SavedModel argument is not 0 or 1')
         args.task = 'pass'
+        
+    if args.use_tfrecords == 1:
+        use_tfrecords=True
+        if use_tfrecords and args.tfrecords_folder == None:
+            print('Has to have a tfrecords folder when using tfrecords')
+            args.task = 'pass'
+        if args.legacy == 1:
+            legacy=True
+        elif args.legacy == 0:
+            legacy=False
+        else:
+            print('legacy argument is not 0 or 1')
+            args.task = 'pass'
+    elif args.use_tfrecords == 0:
+        use_tfrecords=False
+    else:
+        print('use_tfrecords argument is not 0 or 1')
+        args.task = 'pass'
     
     if args.use_TPU == 1:
         use_TPU=True
+        if not use_tfrecords:
+            print('Need to use tfrecords with TPU')
+            args.task = 'pass'
     elif args.use_TPU == 0:
         use_TPU=False
     else:
@@ -162,27 +183,6 @@ if args.min_accuracy is not None:
     if not (args.min_accuracy > 0 and isinstance(args.min_accuracy, float) and args.min_accuracy < 1):
         print('min_accuracy has to be a float number between 0 and 1')
         args.task = 'pass'
-
-    
-if args.use_tfrecords == 1:
-    use_tfrecords=True
-elif args.use_tfrecords == 0:
-    use_tfrecords=False
-else:
-    print('use_tfrecords argument is not 0 or 1')
-    args.task = 'pass'
-
-if use_tfrecords == True and args.tfrecords_folder == None:
-    print('Has to have a tfrecords folder when using tfrecords')
-    args.task = 'pass'
-    
-if args.legacy == 1:
-    legacy=True
-elif args.legacy == 0:
-    legacy=False
-else:
-    print('legacy argument is not 0 or 1')
-    args.task = 'pass'
 
 #function to preprocess the image
 def prepare_image(image):
@@ -252,14 +252,13 @@ def fit():
         opt_params = {}
         
     if use_tfrecords:
-        classifier = tic.image_classifier(tfrecords_folder=args.tfrecords_folder,
+        classifier = tic.ImageClassifier(tfrecords_folder=args.tfrecords_folder,
                                           batch_size=args.batch_size, 
                                           use_TPU=use_TPU,
-                                          transfer_model=args.transfer_model, 
-                                          load_model=False, 
+                                          transfer_model=args.transfer_model,
                                           legacy=legacy)
         classifier.fit(save_model=save_model, 
-                       extract_SavedModel=extract_SavedModel,
+                       export_model=extract_SavedModel,
                        min_accuracy = args.min_accuracy,
                        **opt_params)
     else:
