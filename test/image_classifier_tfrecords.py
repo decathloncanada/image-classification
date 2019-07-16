@@ -431,7 +431,7 @@ class ImageClassifier():
             plt.imshow(images[i], interpolation='spline16')
             # Name of the true class.
             cls_pred_name = np.asarray(self.categories)[top_pred]
-            cls_pred_perc = cls_pred[i][top_pred]*100
+            cls_pred_perc = cls_pred[i][top_pred]*100   
             xlabel = 'Prediction :\n'
             for (x,y) in zip(cls_pred_name, cls_pred_perc):
                 xlabel += '{0}, {1:.2f}%\n'.format(x,y)
@@ -489,14 +489,15 @@ class ImageClassifier():
             tf.gfile.MkDir(os.path.join(self.parent_dir,path))
         self.model.save(os.path.join(os.path.join(self.parent_dir,path), 'trained_model.h5'))
         print('Model saved!')
-            
-    def extract_saved_model(self, path='./image_classifier/1/'):
-        tf.contrib.saved_model.save_keras_model(self.model, path, custom_objects={'swish': Swish(self._swish)})
-        print('Model extracted!')
-                
+        
     def export_saved_model(self, path='./image_classifier/1/'):
-        tf.keras.experimental.export_saved_model(self.model, path, custom_objects={'swish': Swish(self._swish)})
-        print('Model exported!')
+        with tf.keras.backend.get_session() as sess:
+                tf.saved_model.simple_save(
+                    sess,
+                    path,
+                    inputs={'input_image': self.model.input},
+                    outputs={t.name: t for t in self.model.outputs})
+        print('Model extracted!')
            
     # TODO Warning Keras Tuner is still not finished (Status: pre-alpha.)
 # =============================================================================
@@ -852,7 +853,7 @@ class ImageClassifier():
         # save model in production format
         # https://medium.com/tensorflow/serving-ml-quickly-with-tensorflow-serving-and-docker-7df7094aa008
         if export_model:
-            self.extract_saved_model() if self.legacy else self.export_saved_model()
+            self.export_saved_model()
         
 if __name__ == '__main__':
     classifier = ImageClassifier()
