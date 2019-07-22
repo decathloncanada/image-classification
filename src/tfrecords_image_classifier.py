@@ -24,11 +24,12 @@ import skopt
 import dill
 import datetime
 import glob
+from util import utils
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from google.colab import auth
 from oauth2client.client import GoogleCredentials
-from efficientnet import EfficientNetB0, EfficientNetB3
+from efficientnet import EfficientNetB0, EfficientNetB3, EfficientNetB5
 AUTO = tf.data.experimental.AUTOTUNE
 
 class Swish(tf.keras.layers.Activation):
@@ -142,7 +143,7 @@ class ImageClassifier():
         self.validation_steps = int(nb_val_images / self.batch_size)
         print('Val steps per epochs = '+str(self.validation_steps))
 
-        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet', 'B3']:
+        if transfer_model in ['Inception', 'Xception', 'Inception_Resnet', 'B3', 'B5']:
             self.target_size = (299, 299)
         else:
             self.target_size = (224, 224)
@@ -154,10 +155,7 @@ class ImageClassifier():
         
         if load_model:
             # Useful to avoid clutter from old models / layers.
-            tf.keras.backend.clear_session()
-            self.model = tf.keras.models.load_model(os.path.join(self.parent_dir, 'data/trained_models/trained_model.h5'))
-            print('Model loaded !')
-            # self.model.summary()
+            self.model = utils.load_model(os.path.join(self.parent_dir, 'data/trained_models/trained_model.h5'))
 
         
     """
@@ -679,6 +677,10 @@ class ImageClassifier():
                 base_model = EfficientNetB3(weights='imagenet',include_top=False,
                                             input_shape=(*self.target_size, 3))
                 based_model_last_block = 354  # last block 370, two blocks 354
+            elif self.transfer_model == 'B5':
+                base_model = EfficientNetB5(weights='imagenet',include_top=False,
+                                            input_shape=(*self.target_size, 3))
+                based_model_last_block = 417  # last block 559, two blocks 417
             else:
                 base_model = tf.keras.applications.InceptionV3(weights='imagenet',
                                       include_top=False, input_shape=(*self.target_size, 3))

@@ -14,6 +14,7 @@ import PIL
 import shutil
 from PIL import Image
 import os,sys,inspect, math
+import efficientnet
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 
@@ -142,6 +143,16 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=1
         return input_img
 
     return eraser
+
+def load_model(path, include_top=True):
+    # Useful to avoid clutter from old models / layers.
+    tf.keras.backend.clear_session()
+    model = tf.keras.models.load_model(path, compile=include_top)
+    print('Model loaded !')
+    if not include_top:
+        model = tf.keras.Model(inputs = model.input, outputs=model.layers[-2].output)
+    return model
+    
     
         
     
