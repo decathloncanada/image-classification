@@ -11,12 +11,14 @@ This file: an attempt to read tf records
 
 @author: AI team
 """
-import inspect
+import os, sys, inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir)
 from PIL import Image
 import PIL
 import math
 import random
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -24,7 +26,7 @@ import skopt
 import dill
 import datetime
 import glob
-from util import utils
+from utils import utils
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
 from google.colab import auth
