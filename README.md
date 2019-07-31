@@ -5,7 +5,17 @@ This library contains the methods required to build an image recognition API usi
 For any additional information, please contact samuel.mercier@decathlon.com
 
 ## Getting started
-Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, pandas, matplotlib, selenium and Flask) properly installed. If you want to use the extract_images functionality, make sure you have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder. 
+Make sure you have python 3 and the required libraries (Tensorflow, dill, Pillow, scikit-optimize, pandas, matplotlib, selenium, Flask and Augmentor) properly installed. If you want to use the extract_images functionality, make sure you have your [chromedriver executable](http://chromedriver.chromium.org/) in the root folder. If you want to use TPU and transfer learning, you have to use Tensorflow 1.13.1 since 1.14 currently has a bug where you can't recompile a TPU model with weights (https://github.com/tensorflow/tensorflow/issues/29896).
+
+If you want to use the EfficientNet for transfer learning you will need to get the tensorflow keras version from this repository.
+```
+pip install -U git+https://github.com/mattiavarile/efficientnet
+```
+
+If you want to use the hyperparameters optimization, you need to install scikit optimize from the github version since the latest one is not on PyPI and we need it.
+```
+pip install git+git://github.com/scikit-optimize/scikit-optimize.git
+```
 
 You can then git clone the project to the desired location
 ```
@@ -13,7 +23,7 @@ git clone https://github.com/decathloncanada/image-classification.git
 ```
 
 ## Services
-This library performs the following tasks: extraction of a set of images from Google Images, training a neural network built by transfer learning, optimization of the neural network hyperparameters, evaluation of the model accuracy on a test set, and classification of images using a Flask API.
+This library performs the following tasks: extraction of a set of images from Google Images, data augmentation, training a neural network built by transfer learning, optimization of the neural network hyperparameters, evaluation of the model accuracy on a test set, and classification of images using a Flask API.
 
 ### Building training, validation and test sets of images
 To build a set of images to train your neural network, first edit the "searchterms.csv" document in the data folder to indicate the categories you want to classify, the search terms from which you would like to build your sets of images, along with the number of images you want to extract from the Google search. For instance, let's assume you want to build a training and a validation set to distinguish a hockey player from a soccer player. As an example, the searchterms.csv file could look as follows:
@@ -78,12 +88,20 @@ python main.py --task split_training --val_fraction 0.1
 ```
 This will go through all the classes in the training set, randomly pick a fraction (*val_fraction* argument) of the images, and move them from the train/ directory to a newly created val/ directory.
 
+Once this is done you can generate Tfrecords, wich is hardly recommended if you want to use TPU, or just to get better performance from your GPU. It is recommended that you create 100 Mb file using multiple shards. Also, you can save the generated files in a GCS Bucket (gs://) as the output folder.
+```
+generator = TfrecordsGenerator()
+generator.convert_image_folder(img_folder, ouput_folder, shards=8)
+````
+
 ### Training the classification model
 Once you have a dataset of images (in a train and a val directory, structured as described in the previous section) for each of your classes, you can train your custom made classifier by running the following command:
 ```
 python main.py --task fit --save_model 1
 ```
-This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a --save_model 0 argument.  
+This will train the neural network using the images in the dataset, and provide the training and validation accuracy. The hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) used are those stored after hyperparameter optimization (see the following section), or default values if such a file is not found. The trained model will be saved in a the '/data/trained_models/trained_model.h5' file, unless you provide a --save_model 0 argument.
+
+If you  are using Tfrecords, you'll also need to specify the folder (or GCS Bucket) where they are stored.
 
 ### Optimization of the hyperparameters
 The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:

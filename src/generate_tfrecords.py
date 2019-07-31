@@ -48,7 +48,7 @@ class TfrecordsGenerator:
     
     #main method, to convert all images
     def convert_image_folder(self, img_folder=parentdir+'/data/image_dataset/train',
-                             gcs_ouput=parentdir+'/data/image_dataset/train',
+                             ouput_folder=parentdir+'/data/image_dataset/train',
                              shards=16, target_size=(299, 299)):
         # Get all file names of images present in folder
         classes = sorted(os.listdir(img_folder))
@@ -90,7 +90,7 @@ class TfrecordsGenerator:
             # batch size used as shard size here
             shard_size = image.shape[0]
             # good practice to have the number of records in the filename
-            filename = os.path.join(gcs_ouput, "{:02d}-{}.tfrec".format(shard, shard_size))
+            filename = os.path.join(ouput_folder, "{:02d}-{}.tfrec".format(shard, shard_size))
   
             with tf.python_io.TFRecordWriter(filename) as out_file:
                 for i in range(shard_size):
@@ -102,6 +102,5 @@ class TfrecordsGenerator:
             
 if __name__=='__main__':
     transformer = TfrecordsGenerator()
-    transformer.convert_image_folder(img_folder=parentdir+'/data/image_dataset/val',
-                                     tfrecord_file_name=parentdir+'/data/image_dataset/val.tfrecord')
+    
     

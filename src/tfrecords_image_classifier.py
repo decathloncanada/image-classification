@@ -86,7 +86,6 @@ class ImageClassifier():
         self.parent_dir = os.path.dirname(self.current_dir)
         self.train_dir = os.path.join(self.parent_dir, 'data/image_dataset/train')
         self.val_dir = os.path.join(self.parent_dir, 'data/image_dataset/val')
-        self.test_dir = os.path.join(self.parent_dir, 'data/image_dataset/test')
         # We expect the classes to be the name of the folders in the training set
         self.categories = sorted(os.listdir(self.train_dir))
         self.tfrecords_folder = tfrecords_folder
@@ -127,9 +126,6 @@ class ImageClassifier():
         for val_tfrecord in val_tfrecords:
             nb_val_images += int(val_tfrecord.split('.')[0].split('-')[1])
         print('Val images = '+str(nb_val_images))
-        
-        self.nb_test_images = len(tf.io.gfile.glob(os.path.join(self.test_dir, '*/*')))
-        print('Test images = {}'.format(self.nb_test_images))
         
         self.training_shard_size = math.ceil(self.nb_train_images/self.nb_train_shards)
         print('Training shard size = {}'.format(self.training_shard_size))
@@ -400,43 +396,9 @@ class ImageClassifier():
         self.plot_images(images=images,
                     cls_true=[ cls_true[i] for i in random_errors],
                     cls_pred=[ cls_pred[i] for i in random_errors])
-        
-    def classify_folder(self, path=None):
-        if path == None : path = self.test_dir 
-        test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
-        test_generator = test_datagen.flow_from_directory(directory=path, 
-                                                       target_size=self.target_size,
-                                                       shuffle=False,
-                                                       interpolation='bilinear',
-                                                       color_mode='rgb',
-                                                       class_mode=None,
-                                                       batch_size=self.nb_test_images)
-        images = []
-        for _ in range(len(test_generator)):
-            images.append(next(test_generator)) 
-        images = np.reshape(np.asarray(images), [-1, *self.target_size, 3])
-        print('Test images loaded')
-            
-        cls_pred =  self.model.predict(images, batch_size=1) # Batch size = 1 to avoid OOM
-        tf.keras.backend.clear_session()
-        print('Test labels loaded')
-        
-        for i in range(len(images)):
-            top_pred = np.argsort(cls_pred[i])[::-1][:3]
-            plt.imshow(images[i], interpolation='spline16')
-            # Name of the true class.
-            cls_pred_name = np.asarray(self.categories)[top_pred]
-            cls_pred_perc = cls_pred[i][top_pred]*100
-            xlabel = 'Prediction :\n'
-            for (x,y) in zip(cls_pred_name, cls_pred_perc):
-                xlabel += '{0}, {1:.2f}%\n'.format(x,y)
-            plt.xlabel(xlabel)
-            plt.xticks([])
-            plt.yticks([])
-            plt.show()
  
-    def classify_images(self, image_path):
-        images = glob.glob( os.path.join(image_path, '*.jpg') )
+    def classify_images(self, image_paths):
+        images = glob.glob( os.path.join(image_paths, '*.jpg') )
         for image in images:
             #load the image
             image = Image.open(image)
@@ -464,8 +426,7 @@ class ImageClassifier():
             plt.yticks([])
             plt.show()
         
-    def evaluate(self, path=None):
-        if path == None : path = self.test_dir 
+    def evaluate(self, path):
         test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
         test_generator = test_datagen.flow_from_directory(directory=path, 
                                                        target_size=self.target_size,
@@ -473,7 +434,7 @@ class ImageClassifier():
                                                        interpolation='bilinear',
                                                        color_mode='rgb',
                                                        class_mode='sparse',
-                                                       batch_size=self.nb_test_images)
+                                                       batch_size=1)
 
         self.test_results = self.model.evaluate_generator(
                 generator=test_generator)
