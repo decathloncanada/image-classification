@@ -120,7 +120,7 @@ python main.py --task fit --save_model 1 --use_tfrecords 1 --tfrecords_folder gs
 ```
 There is also the option to use TPU accelerators with Tfrecords, but as explained in the Getting started section, some details need to be considerated.
 ```
-python main.py --task fit --use_TPU --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
+python main.py --task fit --use_TPU 1 --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
 ```
 ### Optimization of the hyperparameters
 The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:
