@@ -88,6 +88,18 @@ python main.py --task split_training --val_fraction 0.1
 ```
 This will go through all the classes in the training set, randomly pick a fraction (*val_fraction* argument) of the images, and move them from the train/ directory to a newly created val/ directory.
 
+### Make data augmentation on training images
+
+You can increase the training dataset by using data augmentation. By default it will look for images in the training directory created just before. You can also choose between all these options : distortion, flip_horizontal, flip_vertical, random_crop, random_erasing, rotate, resize, target_width (defaul 299), target_height (defaul 299).
+
+Then you need to specify a desired number of images for all the classes, and it will generate new images to get as close as possible to that number. Since the new images are saved in a folder inside each class foder, you can use the function move_output to move them with the original images.
+```
+augmentor = DataAugmentor(distortion=True, flip_horizontal=True, flip_vertical=True)
+augmentor.generate_images(200)
+augmentor.move_outputs()
+````
+
+### Generate Tfrecord files
 Once this is done you can generate Tfrecords, wich is hardly recommended if you want to use TPU, or just to get better performance from your GPU. It is recommended that you create 100 Mb file using multiple shards. Also, you can save the generated files in a GCS Bucket (gs://) as the output folder.
 ```
 generator = TfrecordsGenerator()
@@ -103,14 +115,25 @@ This will train the neural network using the images in the dataset, and provide 
 
 If you  are using Tfrecords, you'll also need to specify the folder (or GCS Bucket) where they are stored.
 
+```
+python main.py --task fit --save_model 1 --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
+```
+
 ### Optimization of the hyperparameters
 The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:
 ```
 python main.py --task hyperparameters --number_iterations 20
 ```
+
+If you  are using Tfrecords, you'll also need to specify the folder (or GCS Bucket) where they are stored.
+```
+python main.py --task hyperparameters --number_iterations 20 --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
+```
 This calls an hyperparameter optimization function which, using [scikit-optimize](https://scikit-optimize.github.io/), tries different combinations of the hyperparameters to find values maximizing the accuracy of the classifier. The argument --number_iterations indicates the number of different combinations of the hyperparameters we let scikit-optimize attempt to identify good values of the hyperparameters. 
 
 The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model *.fit* function are required to identify quality hyperparameter values.
+
+Every iterations a checkpoint.pkl file is saved and uploaded to your drive so you don't lose your progress in Google Colab.
 
 ### Evaluation of the model accuracy
 The classification accuracy of the model can be assessed on a given set of images by the following command:
