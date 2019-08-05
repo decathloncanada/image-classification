@@ -118,7 +118,10 @@ If you  are using Tfrecords, you'll also need to specify the folder (or GCS Buck
 ```
 python main.py --task fit --save_model 1 --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
 ```
-
+There is also the option to use TPU accelerators with Tfrecords, but as explained in the Getting started section, some details need to be considerated.
+```
+python main.py --task fit --use_TPU --use_tfrecords 1 --tfrecords_folder gs://path_to_folder_containing_train_and_val_folders_with_tfrecords
+```
 ### Optimization of the hyperparameters
 The classification system contains a number of hyperparameters (number of epochs, number of hidden layers, size of the hidden layers, learning rate, dropout rate, fine tuning, activation function and weighting images given the number of images in each class) whose values strongly affect the accuracy of the classifier. Values of these hyperparameters appropriate for the categories we want to classify can be found by the following command:
 ```
@@ -141,6 +144,12 @@ The classification accuracy of the model can be assessed on a given set of image
 python main.py --task evaluate --evaluate_directory test
 ```
 This will load the model saved in the ./data/trained_model directory, classify the images found in the directory (either train, val or test) specified by the --evaluate_directory argument, and return the classification accuracy.
+
+### Saving and exporting the keras model
+Once you are satisfied with your results, you can save the model to a .h5 format for futher uses with the --save_model 1 option of main.py or directly using ImageClassifier.fit(save_model=True). To export the model to a tensorflow format (saved_model.pb), you have to use to ImageClassifier.export_saved_model() function.
+
+### Loading a keras model
+If you have a saved keras model (.h5) and you want to use it, or export it to another format, you can load it with the ImageClassifier(load_model=True) or you can use the utils.load_model(paht, include_top) function to return the model with/without the top for transfer learning purposes.
 
 ### Classifying an image: from main.py
 The class to which an image belongs can be predicted by running the following command:
