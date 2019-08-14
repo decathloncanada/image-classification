@@ -136,7 +136,7 @@ This calls an hyperparameter optimization function which, using [scikit-optimize
 
 The optimal hyperparameters are saved as a hyperparameters_search.pickle file in the ./data/trained_model directory. Optimization of the hyperparameters can take a few hours (depending on the number of classes and the number of images per class), as many calls to the model *.fit* function are required to identify quality hyperparameter values.
 
-Every iterations a checkpoint.pkl file is saved and uploaded to your drive so you don't lose your progress in Google Colab.
+Every iterations a checkpoint.pkl file is saved and uploaded to your drive so you don't lose your progress in Google Colab. If you want to restart from a previous checkpoint.pkl, you need to upload it into the image-classification/data/trained_models/ directory.
 
 ### Evaluation of the model accuracy
 The classification accuracy of the model can be assessed on a given set of images by the following command:
