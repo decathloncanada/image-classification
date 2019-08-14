@@ -811,7 +811,11 @@ class ImageClassifier():
 
         # Evaluate the model, just to be sure
         self.fitness = history.history['val_sparse_categorical_accuracy'][-1]
-        self.model = model.sync_to_cpu();print('Sync to CPU') if self.use_TPU else model
+        if self.use_TPU :
+            self.model = model.sync_to_cpu()
+            print('Sync to CPU') 
+        else :
+            self.model = model
         del history
         del model
         # Save the model
