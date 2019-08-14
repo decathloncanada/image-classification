@@ -149,7 +149,15 @@ This will load the model saved in the ./data/trained_model directory, classify t
 Once you are satisfied with your results, you can save the model to a .h5 format for futher uses with the --save_model 1 option of main.py or directly using ImageClassifier.fit(save_model=True). To export the model to a tensorflow format (saved_model.pb), you have to use to ImageClassifier.export_saved_model() function.
 
 ### Loading a keras model
-If you have a saved keras model (.h5) and you want to use it, or export it to another format, you can load it with the ImageClassifier(load_model=True) or you can use the utils.load_model(paht, include_top) function to return the model with/without the top for transfer learning purposes.
+If you have a saved keras model (.h5) and you want to use it, or export it to another format, you can load it with the ImageClassifier(load_model=True) or you can use the utils.load_model(path, include_top) function to return the model with/without the top for transfer learning purposes.
+
+This is how you would load a trained model and change the softmax for transfer learning purposes.
+```
+model = utils.load_model(path='/content/image-classification/data/trained_models/trained_model.h5', include_top=False)
+x = model.output
+predictions = tf.keras.layers.Dense(333, activation='softmax', name='prediction_layer')(x)
+new_model = tf.keras.Model(inputs=model.input, outputs=predictions)
+```
 
 ### Classifying an image: from main.py
 The class to which an image belongs can be predicted by running the following command:
