@@ -27,52 +27,8 @@ import dill
 import datetime
 import glob
 from utils import utils
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
-from google.colab import auth
-from oauth2client.client import GoogleCredentials
 from efficientnet import EfficientNetB0, EfficientNetB3, EfficientNetB5
 AUTO = tf.data.experimental.AUTOTUNE
-
-class Swish(tf.keras.layers.Activation):
-    
-    def __init__(self, activation, **kwargs):
-        super(Swish, self).__init__(activation, **kwargs)
-        self.__name__ = 'swish'
-        
-class CheckpointDownloader(object):
-    """
-    Download current state after each iteration to Google Drive.
-    Example usage:
-        from pydrive.auth import GoogleAuth
-        from pydrive.drive import GoogleDrive
-        from google.colab import auth
-        from oauth2client.client import GoogleCredentials
-        checkpoint_callback = CheckpointDownloader("./result.pkl")
-        skopt.gp_minimize(obj_fun, dims, callback=[checkpoint_callback])
-    Parameters
-    ----------
-    * `checkpoint_path`: location where checkpoint are saved to;
-    """
-    def __init__(self, checkpoint_path):
-        self.checkpoint_path = checkpoint_path
-
-    def __call__(self, res):
-        """
-        Parameters
-        ----------
-        * `res` [`OptimizeResult`, scipy object]:
-            The optimization as a OptimizeResult object.
-        """
-        if os.path.exists(self.checkpoint_path):
-            print('Uploading checkpoint ' + self.checkpoint_path + ' to Google Drive')
-            auth.authenticate_user()
-            gauth = GoogleAuth()
-            gauth.credentials = GoogleCredentials.get_application_default()
-            drive = GoogleDrive(gauth)
-            file = drive.CreateFile({'title': 'checkpoint.pkl'})
-            file.SetContentFile(self.checkpoint_path)
-            file.Upload()
 
 class ImageClassifier():
     
@@ -80,7 +36,7 @@ class ImageClassifier():
         return (tf.keras.backend.sigmoid(inputs) * inputs)
 
     def __init__(self, tfrecords_folder, batch_size=128, use_TPU=False,
-            transfer_model='Inception', load_model=False, legacy=False):
+            transfer_model='Inception', load_model=False):
         
         self.current_dir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
         self.parent_dir = os.path.dirname(self.current_dir)
@@ -97,9 +53,8 @@ class ImageClassifier():
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
         self.use_GPU = tf.test.is_built_with_cuda()
-        if  not tf.__version__.split('.')[1] == '14' and not legacy:
-            raise Exception('This notebook is not compatible with lower version of Tensorflow 1.14, please use legacy mode')
-        self.legacy = legacy
+        # If you use TPU, you need to use legacy code from previous tensorflow(1.13 or lower)
+        self.legacy = self.use_TPU 
         
         # We expect the classes to be the name of the folders in the training set
         self.categories = sorted(os.listdir(self.train_dir))
@@ -149,7 +104,7 @@ class ImageClassifier():
         # As we know SWISH activation function recently published by a team at Google. 
         # If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) 
         # https://arxiv.org/abs/1710.05941
-        tf.keras.utils.get_custom_objects().update({'swish': Swish(self._swish)})
+        tf.keras.utils.get_custom_objects().update({'swish': utils.Swish(self._swish)})
         
         if load_model:
             # Useful to avoid clutter from old models / layers.
@@ -160,9 +115,10 @@ class ImageClassifier():
     helper functions to load tfrecords. Strongly inspired by
     https://colab.research.google.com/github/GoogleCloudPlatform/training-data-analyst/blob/master/courses/fast-and-lean-data-science/07_Keras_Flowers_TPU_playground.ipynb#scrollTo=LtAVr-4CP1rp
     """
-    def get_input_dataset(self, is_training, nb_readers):
+    # Returns a iterable dataset for Tensorflow 1.14+
+    def get_dataset(self, is_training, nb_readers):
         
-        def read_tfrecord(example):
+        def _read_tfrecord(example):
 
             features = {
                 'image': tf.io.FixedLenFeature((), tf.string),
@@ -175,7 +131,7 @@ class ImageClassifier():
             label = tf.cast([example['label']], tf.int32)
             return feature, label
 
-        def load_dataset(filenames):
+        def _load_dataset(filenames):
             buffer_size = 8 * 1024 * 1024  # 8 MiB per file
             dataset = tf.data.TFRecordDataset(
                 filenames, buffer_size=buffer_size)
@@ -187,19 +143,20 @@ class ImageClassifier():
         options = tf.data.Options()
         options.experimental_deterministic = not is_training
         dataset = dataset.with_options(options)
-        dataset = dataset.interleave(load_dataset, nb_readers, num_parallel_calls=AUTO)
+        dataset = dataset.interleave(_load_dataset, nb_readers, num_parallel_calls=AUTO)
         if is_training:
             # Shuffle only for training.
             dataset = dataset.shuffle(buffer_size=math.ceil(self.training_shard_size*self.nb_train_shards/4))
         dataset = dataset.repeat()
-        dataset = dataset.map(read_tfrecord, num_parallel_calls=AUTO)
+        dataset = dataset.map(_read_tfrecord, num_parallel_calls=AUTO)
         dataset = dataset.batch(batch_size=self.batch_size, drop_remainder=self.use_TPU)
         dataset = dataset.prefetch(AUTO)
         return dataset
 
-    def get_batched_dataset(self, is_training, nb_readers):
+    # Returns a iterable dataset for tensorflow 1.13
+    def get_legacy_dataset(self, is_training, nb_readers):
         
-        def read_tfrecord(example):
+        def _read_tfrecord(example):
             features = {
                 'image': tf.FixedLenFeature((), tf.string),
                 'label': tf.FixedLenFeature((), tf.int64),
@@ -211,7 +168,7 @@ class ImageClassifier():
             label = tf.cast([example['label']], tf.int32)
             return feature, label
 
-        def load_dataset(filenames):
+        def _load_dataset(filenames):
             buffer_size = 8 * 1024 * 1024  # 8 MiB per file
             dataset = tf.data.TFRecordDataset(
                 filenames, buffer_size=buffer_size)
@@ -221,7 +178,7 @@ class ImageClassifier():
             self.tfrecords_folder, "train/*" if is_training else "val/*")
         dataset = tf.data.Dataset.list_files(file_pattern, shuffle=is_training)
         dataset = dataset.apply(tf.data.experimental.parallel_interleave(
-                                load_dataset, cycle_length=nb_readers,
+                                _load_dataset, cycle_length=nb_readers,
                                 sloppy=is_training))
         if is_training:
             dataset = dataset.apply(tf.data.experimental.shuffle_and_repeat(
@@ -229,19 +186,19 @@ class ImageClassifier():
         else:
             dataset = dataset.repeat()
         dataset = dataset.apply(tf.data.experimental.map_and_batch(
-                                read_tfrecord, batch_size=self.batch_size,
+                                _read_tfrecord, batch_size=self.batch_size,
                                 num_parallel_calls=AUTO, drop_remainder=self.use_TPU))
         dataset = dataset.prefetch(AUTO)
         return dataset
 
     def get_training_dataset(self):
 
-        return self.get_batched_dataset(True, self.nb_train_shards) if self.legacy else self.get_input_dataset(True, self.nb_train_shards)
+        return self.get_legacy_dataset(True, self.nb_train_shards) if self.legacy else self.get_dataset(True, self.nb_train_shards)
                 
 
     def get_validation_dataset(self):
         
-        return self.get_batched_dataset(False, self.nb_val_shards) if self.legacy else self.get_input_dataset(False, self.nb_val_shards)
+        return self.get_legacy_dataset(False, self.nb_val_shards) if self.legacy else self.get_dataset(False, self.nb_val_shards)
     
     
     # print examples of images not properly classified...
@@ -504,7 +461,7 @@ class ImageClassifier():
         # unserializable (i.e. if an exception is raised when trying to serialize
         # the optimization result)                
         checkpoint_saver = skopt.callbacks.CheckpointSaver(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'), store_objective=False)
-        checkpoint_dowloader = CheckpointDownloader(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'))
+        checkpoint_dowloader = utils.CheckpointDownloader(os.path.join(self.parent_dir, 'data/trained_models/checkpoint.pkl'))
         verbose = skopt.callbacks.VerboseCallback(n_total=num_iterations)
 
         # declare the fitness function

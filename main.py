@@ -80,10 +80,6 @@ parser.add_argument('--min_accuracy', type=float, default=None,
                     help="""
                     Minimum training accuracy after 1 epoch to continue training
                     """)
-parser.add_argument('--legacy', type=int, default=0,
-                    help="""
-                    If we want (1) or not (0) to use with old tensorflow version
-                    """)
 parser.add_argument('--use_tfrecords', type=int, default=0,
                     help="""
                     If we want (1) or not (0) to use tfrecords
@@ -125,13 +121,6 @@ if args.task == 'fit':
         use_tfrecords=True
         if use_tfrecords and args.tfrecords_folder == None:
             print('Has to have a tfrecords folder when using tfrecords')
-            args.task = 'pass'
-        if args.legacy == 1:
-            legacy=True
-        elif args.legacy == 0:
-            legacy=False
-        else:
-            print('legacy argument is not 0 or 1')
             args.task = 'pass'
     elif args.use_tfrecords == 0:
         use_tfrecords=False
@@ -224,8 +213,7 @@ def hyperparameters():
         classifier = ImageClassifier(tfrecords_folder=args.tfrecords_folder,
                                      batch_size=args.batch_size, 
                                      use_TPU=use_TPU,
-                                     transfer_model=args.transfer_model,
-                                     legacy=legacy)
+                                     transfer_model=args.transfer_model)
         classifier.hyperparameter_optimization(num_iterations=args.number_iterations, 
                                                n_random_starts=args.n_random_starts,
                                                min_accuracy = args.min_accuracy)
@@ -262,8 +250,7 @@ def fit():
         classifier = ImageClassifier(tfrecords_folder=args.tfrecords_folder,
                                      batch_size=args.batch_size, 
                                      use_TPU=use_TPU,
-                                     transfer_model=args.transfer_model,
-                                     legacy=legacy)
+                                     transfer_model=args.transfer_model)
         classifier.fit(save_model=save_model, 
                        export_model=extract_SavedModel,
                        min_accuracy = args.min_accuracy,

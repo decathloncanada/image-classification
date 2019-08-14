@@ -15,6 +15,10 @@ import shutil
 from PIL import Image
 import os,sys,inspect, math
 import efficientnet
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 
@@ -154,5 +158,45 @@ def load_model(path, include_top=True):
     return model
     
     
+
+class Swish(tf.keras.layers.Activation):
+    
+    def __init__(self, activation, **kwargs):
+        super(Swish, self).__init__(activation, **kwargs)
+        self.__name__ = 'swish'
         
+class CheckpointDownloader(object):
+    """
+    Download current state after each iteration to Google Drive.
+    Example usage:
+        from pydrive.auth import GoogleAuth
+        from pydrive.drive import GoogleDrive
+        from google.colab import auth
+        from oauth2client.client import GoogleCredentials
+        checkpoint_callback = CheckpointDownloader("./result.pkl")
+        skopt.gp_minimize(obj_fun, dims, callback=[checkpoint_callback])
+    Parameters
+    ----------
+    * `checkpoint_path`: location where checkpoint are saved to;
+    """
+    def __init__(self, checkpoint_path):
+        self.checkpoint_path = checkpoint_path
+
+    def __call__(self, res):
+        """
+        Parameters
+        ----------
+        * `res` [`OptimizeResult`, scipy object]:
+            The optimization as a OptimizeResult object.
+        """
+        if os.path.exists(self.checkpoint_path):
+            print('Uploading checkpoint ' + self.checkpoint_path + ' to Google Drive')
+            auth.authenticate_user()
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            drive = GoogleDrive(gauth)
+            file = drive.CreateFile({'title': 'checkpoint.pkl'})
+            file.SetContentFile(self.checkpoint_path)
+            file.Upload()
+
     
