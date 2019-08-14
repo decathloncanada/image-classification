@@ -29,10 +29,6 @@ import glob
 from utils import utils
 from efficientnet import EfficientNetB0, EfficientNetB3, EfficientNetB5
 AUTO = tf.data.experimental.AUTOTUNE
-# Does the TPU support eager mode?
-# No, eager mode uses a new dynamic execution engine, while the TPU uses XLA, which performs static compilation of the execution graph.
-# https://cloud.google.com/tpu/docs/faq
-# tf.enable_eager_execution()
 
 class ImageClassifier():
     
@@ -49,12 +45,10 @@ class ImageClassifier():
         # We expect the classes to be the name of the folders in the training set
         self.categories = sorted(os.listdir(self.train_dir))
         self.tfrecords_folder = tfrecords_folder
-        
         if use_TPU and batch_size % 8:
             print('Batch size {} is not multiple of 8, required for TPU'.format(batch_size))
             batch_size = 8 * round(batch_size/8)
             print('New batch size is {}'.format(batch_size))
-        
         self.batch_size = batch_size
         self.use_TPU = use_TPU
         self.transfer_model = transfer_model
@@ -77,6 +71,7 @@ class ImageClassifier():
         self.nb_val_shards = len(val_tfrecords)
         print('Val tfrecords = {}'.format(self.nb_val_shards))
         
+        # Expexted tfrecord file name : filenumber-numberofimages.tfrec (02-2223.tfrec)
         self.nb_train_images = 0
         for train_tfrecord in train_tfrecords:
             self.nb_train_images += int(train_tfrecord.split('.')[0].split('-')[1])
@@ -106,8 +101,9 @@ class ImageClassifier():
         else:
             self.target_size = (224, 224)
             
-        # Init custom objects before loading     
-
+        # As we know SWISH activation function recently published by a team at Google. 
+        # If you are not familiar with the Swish activation (mathematically, f(x)=x*sigmoid(x)) 
+        # https://arxiv.org/abs/1710.05941
         tf.keras.utils.get_custom_objects().update({'swish': utils.Swish(self._swish)})
         
         if load_model:
@@ -119,7 +115,6 @@ class ImageClassifier():
     helper functions to load tfrecords. Strongly inspired by
     https://colab.research.google.com/github/GoogleCloudPlatform/training-data-analyst/blob/master/courses/fast-and-lean-data-science/07_Keras_Flowers_TPU_playground.ipynb#scrollTo=LtAVr-4CP1rp
     """
-    
     # Returns a iterable dataset for Tensorflow 1.14+
     def get_dataset(self, is_training, nb_readers):
         
@@ -359,8 +354,8 @@ class ImageClassifier():
                     cls_true=[ cls_true[i] for i in random_errors],
                     cls_pred=[ cls_pred[i] for i in random_errors])
  
-    def classify_images(self, images_path):
-        images = glob.glob( os.path.join(images_path, '*.jpg') )
+    def classify_images(self, image_paths):
+        images = glob.glob( os.path.join(image_paths, '*.jpg') )
         for image in images:
             #load the image
             image = Image.open(image)
@@ -387,7 +382,7 @@ class ImageClassifier():
             plt.xticks([])
             plt.yticks([])
             plt.show()
-    
+        
     def evaluate(self, path):
         test_datagen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1. / 255)
         test_generator = test_datagen.flow_from_directory(directory=path, 
@@ -407,7 +402,7 @@ class ImageClassifier():
             tf.gfile.MkDir(os.path.join(self.parent_dir,path))
         self.model.save(os.path.join(os.path.join(self.parent_dir,path), 'trained_model.h5'))
         print('Model saved!')
-        
+            
     def export_saved_model(self, path='./image_classifier/1/'):
         with tf.keras.backend.get_session() as sess:
                 tf.saved_model.simple_save(
@@ -416,31 +411,7 @@ class ImageClassifier():
                     inputs={'input_image': self.model.input},
                     outputs={t.name: t for t in self.model.outputs})
         print('Model extracted!')
-           
-    # TODO Warning Keras Tuner is still not finished (Status: pre-alpha.)
-# =============================================================================
-#     def hyperband(self):
-#         
-#         from kerastuner.tuners import UltraBand
-#         from kerastuner.distributions import Fixed, Boolean, Choice, Range, Logarithmic, Linear
-#         
-#         epochs = Range(name='epochs', start=1, stop=10)
-#         hidden_size = Choice(name='hidden_size', selection=[256, 512, 1024, 2048])
-#         learning_rate = Logarithmic(name='learning_rate', start=1e-6, stop=1e-2, num_buckets=10)
-#         dropout = Fixed(name='dropout', value=0.9)
-#         l2_lambda = Logarithmic(name='learning_rate', start=0, stop=0.1, num_buckets=10)
-#         
-#         tuner = UltraBand(self.fit(epochs=epochs, 
-#                                    hidden_size=hidden_size, 
-#                                    learning_rate=learning_rate,
-#                                    dropout=dropout, 
-#                                    l2_lambda=l2_lambda), 
-#                           objective='val_sparse_categorical_accuracy', 
-#                           label_names=self.categories)
-# 
-#         tuner.search(self.get_training_dataset,
-#                      validation_data=self.get_validation_dataset)
-# =============================================================================
+
             
     # optimize the hyperparameters of the model
     def hyperparameter_optimization(self, num_iterations=20, save_results=True,
@@ -477,8 +448,6 @@ class ImageClassifier():
             y0 = res.func_vals
             start_from_checkpoint = True
             print('Parameters of previous optimization loaded!')
-            print(x0)
-            print(y0)
         except:
             # fall back default values
             default_parameters = [2, 1024, 5e-4, 0.9, 1e-3]
@@ -497,7 +466,7 @@ class ImageClassifier():
 
         # declare the fitness function
         @skopt.utils.use_named_args(dimensions=dimensions)
-        def _fitness(epochs, hidden_size, learning_rate, dropout, l2_lambda):
+        def fitness(epochs, hidden_size, learning_rate, dropout, l2_lambda):
             
             # print the hyper-parameters
             print('Fitnessing hyper-parameters')
@@ -514,6 +483,8 @@ class ImageClassifier():
             # extract fitness
             fitness = self.fitness
 
+            print('CALCULATED FITNESS OF:', fitness)
+
             del self.model
             tf.keras.backend.clear_session()
             return -fitness
@@ -521,7 +492,7 @@ class ImageClassifier():
         # optimization
         if start_from_checkpoint:
             print('Continuous fitness')
-            search_result = skopt.gp_minimize(func=_fitness,
+            search_result = skopt.gp_minimize(func=fitness,
                                              dimensions=dimensions,
                                              x0=x0,    # already examined values for x
                                              y0=y0,    # observed values for x0
@@ -532,7 +503,7 @@ class ImageClassifier():
                                              callback=[checkpoint_saver,checkpoint_dowloader,verbose])
         else:
             print('New fitness')
-            search_result = skopt.gp_minimize(func=_fitness,
+            search_result = skopt.gp_minimize(func=fitness,
                                              dimensions=dimensions,
                                              # Expected Improvement.
                                              acq_func='EI',
@@ -780,15 +751,6 @@ class ImageClassifier():
         # https://medium.com/tensorflow/serving-ml-quickly-with-tensorflow-serving-and-docker-7df7094aa008
         if export_model:
             self.export_saved_model()
-        
+
 if __name__ == '__main__':
     classifier = ImageClassifier()
-#   classifier.fit(save_model=False, epochs=4, hidden_size=222,
-#                   learning_rate=0.00024,
-#                   fine_tuning=True, transfer_model='Inception_Resnet',
-#                   activation='tanh',
-#                   include_class_weight=True,
-#                   min_accuracy=0.4, extract_SavedModel=True)
-#    classifier.confusion_matrix()
-#    classifier.plot_errors()
-#    classifier._hyperparameter_optimization(num_iterations=20)

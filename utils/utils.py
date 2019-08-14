@@ -9,15 +9,23 @@ split_train: function to build a validation set from a training set of images.
 @author: AI team
 """
 import numpy as np
+import tensorflow as tf
+import PIL
+import shutil
 from PIL import Image
-import os,sys,inspect
+import os,sys,inspect, math
+import efficientnet
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from google.colab import auth
+from oauth2client.client import GoogleCredentials
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 
 from random import shuffle
 
 #function to verify images and convert them to RGB format
-def check_RGB(path=parentdir+'/data/image_dataset/train/'):
+def check_RGB(path=parentdir+'/data/image_dataset/train/', target_size=None):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -35,7 +43,10 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
         for img in imgs_paths:
             #try to open it
             try:
-                jpg = Image.open(img).convert('RGB')
+                if target_size is not None:
+                    jpg = Image.open(img).resize(target_size, PIL.Image.BILINEAR).convert('RGB')
+                else:
+                    jpg = Image.open(img).convert('RGB')
                 jpg.save(str(img))
             except:
                 #delete the file
@@ -45,8 +56,7 @@ def check_RGB(path=parentdir+'/data/image_dataset/train/'):
             if counter % 1000 == 1:
                 print('Verified', counter, 'images')
                 
-
-def split_train(path=parentdir+'/data/image_dataset', split=0.1):
+def split_train(path=parentdir+'/data/image_dataset', split=0.1, with_test=False):
     """
     path: path to the image_dataset directory, which includes a train subdirectory, in
     which we have a folder per category we want to classify. The function will generate,
@@ -58,18 +68,53 @@ def split_train(path=parentdir+'/data/image_dataset', split=0.1):
     #Create a val subdirectory
     os.mkdir(path + '/val')
     
+    #Create a test subdirectory
+    os.mkdir(path + '/test')
+    
     #Loop through all the categories in the train directory
     for i in os.listdir(path + '/train'):
+        
         #Create the folder in the val subdirectory
         os.mkdir(path + '/val/' + i)
+        
+        #Create the folder in the val subdirectory
+        os.mkdir(path + '/test/' + i)
         
         #extract and shuffle all the images
         images = os.listdir(path + '/train/' + i)
         shuffle(images)
         
-        #Move a fraction of the images to the val directory
+        # Move a fraction of the images to the val directory
         for j in range(int(split*len(images))):
             os.rename(path + '/train/' + i + '/' + images[j], path + '/val/' + i + '/' + images[j])
+            
+        # Move one of the images to the test directory
+        if with_test:
+            index = int(split*len(images)) + 1
+            os.rename(path + '/train/' + i + '/' + images[index], path + '/test/' + i + '/' + images[index])
+        
+        
+def split_train_tfrecords(path=parentdir+'/data/image_dataset', split=0.1):
+    """
+    path: path to the train tfrecords directory, which includes all training tfrecords
+    from a dataset. The function will generate, a val subdirectly, in which we move 
+    a portion of the training tfrecords.
+    
+    split: fraction of each category that we move to the validation (val) subdirectory
+    """
+    train_path = os.path.join(path,'train')
+    val_path = os.path.join(path,'val')
+    
+    #Loop through all the tfrecords in the train directory
+    tfrecords = tf.gfile.ListDirectory(train_path)
+    print(tfrecords)
+    shuffle(tfrecords)
+        
+    #Move a fraction of the images to the val directory
+    for i in range(math.ceil(split*len(tfrecords))):
+        
+        tf.gfile.Rename(os.path.join(train_path, tfrecords[i]), os.path.join(val_path, tfrecords[i]))
+            
 
 #function to add cutoff regularization to image classification...
 #...taken from https://github.com/yu4u/cutout-random-erasing/blob/master/random_eraser.py            
@@ -102,8 +147,56 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=1
         return input_img
 
     return eraser
-        
-        
+
+def load_model(path, include_top=True):
+    # Useful to avoid clutter from old models / layers.
+    tf.keras.backend.clear_session()
+    model = tf.keras.models.load_model(path, compile=include_top)
+    print('Model loaded !')
+    if not include_top:
+        model = tf.keras.Model(inputs = model.input, outputs=model.layers[-2].output)
+    return model
     
+    
+
+class Swish(tf.keras.layers.Activation):
+    
+    def __init__(self, activation, **kwargs):
+        super(Swish, self).__init__(activation, **kwargs)
+        self.__name__ = 'swish'
         
+class CheckpointDownloader(object):
+    """
+    Download current state after each iteration to Google Drive.
+    Example usage:
+        from pydrive.auth import GoogleAuth
+        from pydrive.drive import GoogleDrive
+        from google.colab import auth
+        from oauth2client.client import GoogleCredentials
+        checkpoint_callback = CheckpointDownloader("./result.pkl")
+        skopt.gp_minimize(obj_fun, dims, callback=[checkpoint_callback])
+    Parameters
+    ----------
+    * `checkpoint_path`: location where checkpoint are saved to;
+    """
+    def __init__(self, checkpoint_path):
+        self.checkpoint_path = checkpoint_path
+
+    def __call__(self, res):
+        """
+        Parameters
+        ----------
+        * `res` [`OptimizeResult`, scipy object]:
+            The optimization as a OptimizeResult object.
+        """
+        if os.path.exists(self.checkpoint_path):
+            print('Uploading checkpoint ' + self.checkpoint_path + ' to Google Drive')
+            auth.authenticate_user()
+            gauth = GoogleAuth()
+            gauth.credentials = GoogleCredentials.get_application_default()
+            drive = GoogleDrive(gauth)
+            file = drive.CreateFile({'title': 'checkpoint.pkl'})
+            file.SetContentFile(self.checkpoint_path)
+            file.Upload()
+
     
