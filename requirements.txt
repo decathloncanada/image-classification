@@ -80,7 +80,7 @@ sphinxcontrib-websupport==1.1.0
 spyder==3.3.1
 spyder-kernels==0.2.6
 tensorboard==1.13.1
-tensorflow==1.13.1
+tensorflow==2.3.1
 termcolor==1.1.0
 testpath==0.4.2
 tornado==5.1.1
